@@ -1,0 +1,4 @@
+openai-whisper
+pyaudio
+numpy
+googletrans==4.0.0rc1
