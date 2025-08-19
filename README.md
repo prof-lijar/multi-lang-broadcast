@@ -260,23 +260,3 @@ whisper-openai/
 ├── sample.mp3            # Sample audio file
 └── README.md             # This file
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is open source and available under the [MIT License](LICENSE).
-
-## Support
-
-If you encounter any issues or have questions, please:
-
-1. Check the troubleshooting section above
-2. Search existing issues
-3. Create a new issue with detailed information about your problem
