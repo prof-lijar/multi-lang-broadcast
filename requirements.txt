@@ -1,4 +1,26 @@
 openai-whisper
-pyaudio
 numpy
 googletrans==4.0.0rc1
+
+# Google Cloud Speech-to-Text
+google-cloud-speech==2.21.0
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+
+# Audio processing
+pyaudio==0.2.11
+
+# Performance monitoring
+psutil==5.9.6
+
+# Additional utilities
+typing-extensions>=4.8.0
+
+# Google Cloud Text-to-Speech
+google-cloud-texttospeech>=2.16.0
+pygame>=2.5.0
+
+# Build dependencies
+setuptools>=65.0.0
+wheel>=0.37.0
