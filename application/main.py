@@ -3,19 +3,22 @@ FastAPI Application for Multi-Language Broadcast
 Main application entry point with health endpoint
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from datetime import datetime
 import os
 import asyncio
 import json
+import base64
 from typing import Dict, Any, List, Optional
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from service.output_audio import get_audio_service, initialize_audio_service
 from service.translate import get_translation_service, initialize_translation_service
+from service.stt import get_stt_service, initialize_stt_service
 
 # Request models
 class TranslationRequest(BaseModel):
@@ -37,6 +40,16 @@ class StreamingTranslationRequest(BaseModel):
 class LanguageDetectionRequest(BaseModel):
     text: str
 
+class STTRequest(BaseModel):
+    language_code: Optional[str] = "en-US"
+    sample_rate: Optional[int] = 16000
+    chunk_size: Optional[int] = 1024
+
+class STTFileRequest(BaseModel):
+    audio_data: str  # Base64 encoded audio data
+    language_code: Optional[str] = "en-US"
+    sample_rate: Optional[int] = 16000
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Multi-Language Broadcast API",
@@ -55,6 +68,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="."), name="static")
+
 # Initialize services on startup
 @app.on_event("startup")
 async def startup_event():
@@ -72,6 +88,12 @@ async def startup_event():
             print("✅ Translation service initialized successfully")
         else:
             print("⚠️ Translation service initialization failed")
+        
+        # Initialize STT service
+        if initialize_stt_service():
+            print("✅ STT service initialized successfully")
+        else:
+            print("⚠️ STT service initialization failed")
             
     except Exception as e:
         print(f"❌ Error initializing services: {e}")
@@ -352,6 +374,261 @@ async def reset_translation_statistics():
             status_code=500,
             detail=f"Failed to reset statistics: {str(e)}"
         )
+
+# STT endpoints
+@app.post("/stt/transcribe-file", response_model=Dict[str, Any])
+async def transcribe_audio_file(request: STTFileRequest):
+    """Transcribe audio from base64 encoded audio data"""
+    try:
+        stt_service = get_stt_service()
+        
+        if not stt_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="STT service not initialized"
+            )
+        
+        # Decode base64 audio data
+        try:
+            audio_data = base64.b64decode(request.audio_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid base64 audio data: {str(e)}"
+            )
+        
+        result = await stt_service.transcribe_audio_file(
+            audio_data=audio_data,
+            language_code=request.language_code
+        )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audio transcription failed: {str(e)}"
+        )
+
+@app.get("/stt/stream")
+async def stream_speech_to_text(language_code: str = "en-US"):
+    """Stream real-time speech-to-text results"""
+    try:
+        stt_service = get_stt_service()
+        
+        if not stt_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="STT service not initialized"
+            )
+        
+        async def generate_transcriptions():
+            try:
+                print(f"🚀 Starting transcription stream for language: {language_code}")
+                async for result in stt_service.start_streaming(language_code):
+                    print(f"📤 Yielding result to client: {result}")
+                    yield f"data: {json.dumps(result)}\n\n"
+            except Exception as e:
+                print(f"❌ Error in transcription stream: {e}")
+                yield f"data: {json.dumps({'error': str(e), 'type': 'error'})}\n\n"
+        
+        return StreamingResponse(
+            generate_transcriptions(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Speech-to-text streaming failed: {str(e)}"
+        )
+
+@app.post("/stt/stop")
+async def stop_speech_to_text():
+    """Stop the current speech-to-text streaming"""
+    try:
+        stt_service = get_stt_service()
+        stt_service.stop_streaming()
+        
+        return {
+            "status": "success",
+            "message": "Speech-to-text streaming stopped",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to stop speech-to-text: {str(e)}"
+        )
+
+@app.get("/stt/status", response_model=Dict[str, Any])
+async def get_stt_status():
+    """Get STT service status and statistics"""
+    try:
+        stt_service = get_stt_service()
+        stats = stt_service.get_statistics()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get STT status: {str(e)}"
+        )
+
+@app.post("/stt/reset-stats")
+async def reset_stt_statistics():
+    """Reset STT service statistics"""
+    try:
+        stt_service = get_stt_service()
+        stt_service.reset_statistics()
+        
+        return {
+            "status": "success",
+            "message": "STT statistics reset",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset STT statistics: {str(e)}"
+        )
+
+@app.get("/stt/languages", response_model=Dict[str, Any])
+async def get_supported_stt_languages():
+    """Get list of supported languages for speech-to-text"""
+    # Common Google Speech-to-Text supported languages
+    languages = [
+        {"code": "en-US", "name": "English (US)"},
+        {"code": "en-GB", "name": "English (UK)"},
+        {"code": "es-ES", "name": "Spanish (Spain)"},
+        {"code": "es-MX", "name": "Spanish (Mexico)"},
+        {"code": "fr-FR", "name": "French (France)"},
+        {"code": "de-DE", "name": "German (Germany)"},
+        {"code": "it-IT", "name": "Italian (Italy)"},
+        {"code": "pt-BR", "name": "Portuguese (Brazil)"},
+        {"code": "pt-PT", "name": "Portuguese (Portugal)"},
+        {"code": "ru-RU", "name": "Russian (Russia)"},
+        {"code": "ja-JP", "name": "Japanese (Japan)"},
+        {"code": "ko-KR", "name": "Korean (South Korea)"},
+        {"code": "zh-CN", "name": "Chinese (Simplified)"},
+        {"code": "zh-TW", "name": "Chinese (Traditional)"},
+        {"code": "ar-SA", "name": "Arabic (Saudi Arabia)"},
+        {"code": "hi-IN", "name": "Hindi (India)"},
+        {"code": "th-TH", "name": "Thai (Thailand)"},
+        {"code": "vi-VN", "name": "Vietnamese (Vietnam)"},
+        {"code": "my-MM", "name": "Burmese (Myanmar)"},
+        {"code": "km-KH", "name": "Khmer (Cambodia)"}
+    ]
+    
+    return {
+        "status": "success",
+        "timestamp": datetime.utcnow().isoformat(),
+        "data": {
+            "languages": languages,
+            "count": len(languages)
+        }
+    }
+
+# WebSocket endpoint for real-time audio streaming
+@app.websocket("/stt/ws")
+async def websocket_speech_to_text(websocket: WebSocket):
+    """WebSocket endpoint for real-time speech-to-text streaming"""
+    await websocket.accept()
+    
+    try:
+        stt_service = get_stt_service()
+        
+        if not stt_service.is_initialized:
+            await websocket.send_json({
+                "type": "error",
+                "message": "STT service not initialized"
+            })
+            await websocket.close()
+            return
+        
+        # Send initial connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "message": "WebSocket connection established",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        # Listen for audio data from client
+        while True:
+            try:
+                # Receive data from WebSocket
+                data = await websocket.receive()
+                
+                if data["type"] == "websocket.receive":
+                    if "bytes" in data:
+                        # Process audio data
+                        audio_data = data["bytes"]
+                        language_code = "en-US"  # Default language, could be passed from client
+                        
+                        # Process audio and send results
+                        async for result in stt_service.process_websocket_audio(audio_data, language_code):
+                            await websocket.send_json(result)
+                            
+                    elif "text" in data:
+                        # Handle text messages (like language selection)
+                        try:
+                            message = json.loads(data["text"])
+                            if message.get("type") == "language":
+                                language_code = message.get("language", "en-US")
+                        except json.JSONDecodeError:
+                            pass
+                            
+            except WebSocketDisconnect:
+                print("WebSocket client disconnected")
+                break
+            except Exception as e:
+                print(f"WebSocket processing error: {e}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                break
+            
+    except WebSocketDisconnect:
+        print("WebSocket client disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        except:
+            pass
+        finally:
+            try:
+                await websocket.close()
+            except:
+                pass
 
 if __name__ == "__main__":
     # Get configuration from environment variables

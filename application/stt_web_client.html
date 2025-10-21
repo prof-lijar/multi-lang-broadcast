@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STT Web Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .transcript {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            min-height: 100px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .interim {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .final {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-item {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Speech-to-Text Web Client</h1>
+        
+        <div class="controls">
+            <select id="languageSelect">
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish (Spain)</option>
+                <option value="es-MX">Spanish (Mexico)</option>
+                <option value="fr-FR">French (France)</option>
+                <option value="de-DE">German (Germany)</option>
+                <option value="it-IT">Italian (Italy)</option>
+                <option value="pt-BR">Portuguese (Brazil)</option>
+                <option value="ru-RU">Russian (Russia)</option>
+                <option value="ja-JP">Japanese (Japan)</option>
+                <option value="ko-KR">Korean (South Korea)</option>
+                <option value="zh-CN">Chinese (Simplified)</option>
+                <option value="zh-TW">Chinese (Traditional)</option>
+                <option value="ar-SA">Arabic (Saudi Arabia)</option>
+                <option value="hi-IN">Hindi (India)</option>
+                <option value="th-TH">Thai (Thailand)</option>
+                <option value="vi-VN">Vietnamese (Vietnam)</option>
+                <option value="my-MM">Burmese (Myanmar)</option>
+                <option value="km-KH">Khmer (Cambodia)</option>
+            </select>
+            
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="clearBtn" onclick="clearTranscript()">Clear</button>
+            <button id="testMicBtn" onclick="testMicrophone()">Test Microphone</button>
+        </div>
+        
+        <div id="status" class="status disconnected">
+            Disconnected
+        </div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="messageCount">0</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="finalCount">0</div>
+                <div class="stat-label">Final Results</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="interimCount">0</div>
+                <div class="stat-label">Interim Results</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="avgConfidence">0%</div>
+                <div class="stat-label">Avg Confidence</div>
+            </div>
+        </div>
+        
+        <div id="transcript" class="transcript">
+            Transcript will appear here...
+        </div>
+        
+        <div id="debugInfo" class="transcript" style="background: #fff3cd; border-color: #ffeaa7; margin-top: 10px;">
+            <strong>Debug Information:</strong><br>
+            <div id="micStatus">Microphone: Not tested</div>
+            <div id="audioLevel">Audio Level: 0</div>
+            <div id="connectionStatus">WebSocket: Disconnected</div>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let messageCount = 0;
+        let finalCount = 0;
+        let interimCount = 0;
+        let totalConfidence = 0;
+        let confidenceCount = 0;
+        let mediaStream = null;
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let animationId = null;
+
+        function connect() {
+            const language = document.getElementById('languageSelect').value;
+            
+            try {
+                updateStatus('Connecting to STT service...', 'connected');
+                updateConnectionStatus('Connecting');
+                
+                // Use HTTP streaming instead of WebSocket for simplicity
+                const streamUrl = `http://localhost:8000/stt/stream?language_code=${language}`;
+                
+                fetch(streamUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        updateStatus('Connected to STT service', 'connected');
+                        updateConnectionStatus('Connected');
+                        document.getElementById('connectBtn').disabled = true;
+                        document.getElementById('disconnectBtn').disabled = false;
+                        
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        function readStream() {
+                            reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    updateStatus('Stream ended', 'disconnected');
+                                    updateConnectionStatus('Disconnected');
+                                    document.getElementById('connectBtn').disabled = false;
+                                    document.getElementById('disconnectBtn').disabled = true;
+                                    return;
+                                }
+                                
+                                const chunk = decoder.decode(value);
+                                const lines = chunk.split('\n');
+                                
+                                for (const line of lines) {
+                                    if (line.startsWith('data: ')) {
+                                        try {
+                                            const data = JSON.parse(line.substring(6));
+                                            handleMessage(data);
+                                        } catch (e) {
+                                            console.error('Error parsing JSON:', e);
+                                        }
+                                    }
+                                }
+                                
+                                readStream();
+                            });
+                        }
+                        
+                        readStream();
+                    })
+                    .catch(error => {
+                        updateStatus('Connection Failed: ' + error.message, 'disconnected');
+                        updateConnectionStatus('Error');
+                        console.error('Failed to connect:', error);
+                    });
+                
+            } catch (error) {
+                updateStatus('Connection Failed', 'disconnected');
+                console.error('Failed to connect:', error);
+            }
+        }
+
+        function disconnect() {
+            updateStatus('Disconnected', 'disconnected');
+            updateConnectionStatus('Disconnected');
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            stopAudioMonitoring();
+        }
+
+        function handleMessage(data) {
+            messageCount++;
+            updateStats();
+            
+            const transcriptDiv = document.getElementById('transcript');
+            
+            if (data.type === 'connected') {
+                addToTranscript('✅ ' + data.message, 'status');
+            } else if (data.type === 'error') {
+                addToTranscript('❌ Error: ' + data.message, 'error');
+            } else if (data.type === 'final') {
+                finalCount++;
+                addToTranscript('🎯 ' + data.transcript + ' (confidence: ' + (data.confidence * 100).toFixed(1) + '%)', 'final');
+                if (data.confidence) {
+                    totalConfidence += data.confidence;
+                    confidenceCount++;
+                }
+            } else if (data.type === 'interim') {
+                interimCount++;
+                addToTranscript('⏳ ' + data.transcript, 'interim');
+            }
+            
+            updateStats();
+        }
+
+        function addToTranscript(text, className) {
+            const transcriptDiv = document.getElementById('transcript');
+            const timestamp = new Date().toLocaleTimeString();
+            const line = `[${timestamp}] ${text}\n`;
+            
+            // Create a span element for this line
+            const span = document.createElement('span');
+            span.textContent = line;
+            span.className = className;
+            
+            transcriptDiv.appendChild(span);
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + className;
+        }
+
+        function updateStats() {
+            document.getElementById('messageCount').textContent = messageCount;
+            document.getElementById('finalCount').textContent = finalCount;
+            document.getElementById('interimCount').textContent = interimCount;
+            
+            const avgConfidence = confidenceCount > 0 ? (totalConfidence / confidenceCount * 100).toFixed(1) : 0;
+            document.getElementById('avgConfidence').textContent = avgConfidence + '%';
+        }
+
+        function clearTranscript() {
+            document.getElementById('transcript').textContent = 'Transcript cleared...\n';
+            messageCount = 0;
+            finalCount = 0;
+            interimCount = 0;
+            totalConfidence = 0;
+            confidenceCount = 0;
+            updateStats();
+        }
+
+        async function testMicrophone() {
+            try {
+                addToTranscript('🎤 Testing microphone access...', 'status');
+                updateDebugInfo('micStatus', 'Microphone: Requesting access...');
+                
+                // Request microphone access
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    } 
+                });
+                
+                addToTranscript('✅ Microphone access granted!', 'status');
+                updateDebugInfo('micStatus', 'Microphone: Access granted ✅');
+                
+                // Set up audio analysis
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(mediaStream);
+                microphone.connect(analyser);
+                
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                // Start monitoring audio levels
+                startAudioMonitoring();
+                
+                addToTranscript('🎵 Audio monitoring started. Speak to see levels!', 'status');
+                
+            } catch (error) {
+                addToTranscript('❌ Microphone error: ' + error.message, 'error');
+                updateDebugInfo('micStatus', 'Microphone: Error - ' + error.message);
+                console.error('Microphone error:', error);
+            }
+        }
+        
+        function startAudioMonitoring() {
+            if (!analyser) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function monitorAudio() {
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate average audio level
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / bufferLength;
+                const level = Math.round(average);
+                
+                updateDebugInfo('audioLevel', `Audio Level: ${level}`);
+                
+                // Show visual feedback when speaking
+                if (level > 10) {
+                    addToTranscript(`🔊 Audio detected! Level: ${level}`, 'interim');
+                }
+                
+                animationId = requestAnimationFrame(monitorAudio);
+            }
+            
+            monitorAudio();
+        }
+        
+        function stopAudioMonitoring() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            updateDebugInfo('audioLevel', 'Audio Level: 0');
+            updateDebugInfo('micStatus', 'Microphone: Stopped');
+        }
+        
+        function updateDebugInfo(elementId, text) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = text;
+            }
+        }
+        
+        function updateConnectionStatus(status) {
+            updateDebugInfo('connectionStatus', 'WebSocket: ' + status);
+        }
+        
+
+        // Auto-connect on page load (optional)
+        // connect();
+    </script>
+</body>
+</html>

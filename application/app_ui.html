@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Transcription</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .language-selector {
+            margin-bottom: 30px;
+        }
+        
+        .language-selector label {
+            display: block;
+            margin-bottom: 10px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .language-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .lang-btn {
+            padding: 12px 24px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .lang-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+        
+        .lang-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+        
+        .mic-container {
+            margin: 40px 0;
+        }
+        
+        .mic-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            background: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            font-size: 2em;
+        }
+        
+        .mic-button:hover {
+            background: #e0e0e0;
+            transform: scale(1.05);
+        }
+        
+        .mic-button.recording {
+            background: #ff4757;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .mic-button.recording:hover {
+            background: #ff3742;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status.idle {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+        
+        .status.recording {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .transcript-container {
+            margin-top: 30px;
+            text-align: left;
+        }
+        
+        .transcript {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        .transcript-item {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+        
+        .transcript-item.interim {
+            background: #fff3cd;
+            color: #856404;
+            font-style: italic;
+        }
+        
+        .transcript-item.final {
+            background: #d1ecf1;
+            color: #0c5460;
+            font-weight: 500;
+        }
+        
+        .transcript-item.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Live Transcription</h1>
+        
+        <div class="language-selector">
+            <label>Select Language:</label>
+            <div class="language-buttons">
+                <button class="lang-btn active" data-lang="en-US">English</button>
+                <button class="lang-btn" data-lang="ko-KR">한국어</button>
+                <button class="lang-btn" data-lang="zh-CN">中文</button>
+                <button class="lang-btn" data-lang="th-TH">ไทย</button>
+            </div>
+        </div>
+        
+        <div class="mic-container">
+            <button class="mic-button" id="micButton" onclick="toggleRecording()">
+                🎤
+            </button>
+        </div>
+        
+        <div class="status idle" id="status">
+            Click the microphone to start recording
+        </div>
+        
+        <div class="transcript-container">
+            <div class="transcript" id="transcript">
+                <div style="color: #6c757d; text-align: center; padding: 20px;">
+                    Transcription will appear here...
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="clearTranscript()">Clear</button>
+            <button class="btn btn-danger hidden" id="stopButton" onclick="stopRecording()">Stop</button>
+        </div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        let currentLanguage = 'en-US';
+        let streamReader = null;
+        let abortController = null;
+        
+        // Language selection
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentLanguage = this.dataset.lang;
+                console.log('Selected language:', currentLanguage);
+            });
+        });
+        
+        function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                updateStatus('Connecting to STT service...', 'recording');
+                
+                // Create abort controller for cancellation
+                abortController = new AbortController();
+                
+                // Start streaming from backend
+                const response = await fetch(`/stt/stream?language_code=${currentLanguage}`, {
+                    signal: abortController.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                updateStatus('Recording... Speak now!', 'recording');
+                updateUI(true);
+                
+                // Read the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                handleTranscriptionResult(data);
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                            }
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Recording stopped by user');
+                } else {
+                    console.error('Recording error:', error);
+                    updateStatus('Error: ' + error.message, 'error');
+                }
+                updateUI(false);
+            }
+        }
+        
+        function stopRecording() {
+            if (abortController) {
+                abortController.abort();
+            }
+            updateStatus('Stopped', 'idle');
+            updateUI(false);
+        }
+        
+        function updateUI(recording) {
+            isRecording = recording;
+            const micButton = document.getElementById('micButton');
+            const stopButton = document.getElementById('stopButton');
+            
+            if (recording) {
+                micButton.classList.add('recording');
+                micButton.textContent = '⏹️';
+                stopButton.classList.remove('hidden');
+            } else {
+                micButton.classList.remove('recording');
+                micButton.textContent = '🎤';
+                stopButton.classList.add('hidden');
+            }
+        }
+        
+        function updateStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function handleTranscriptionResult(data) {
+            const transcript = document.getElementById('transcript');
+            
+            if (data.type === 'error') {
+                addTranscriptItem('Error: ' + data.message, 'error');
+                return;
+            }
+            
+            if (data.transcript && data.transcript.trim()) {
+                addTranscriptItem(data.transcript, data.type);
+            }
+        }
+        
+        function addTranscriptItem(text, type) {
+            const transcript = document.getElementById('transcript');
+            
+            // Clear placeholder if it exists
+            if (transcript.children.length === 1 && transcript.children[0].style.color === 'rgb(108, 117, 125)') {
+                transcript.innerHTML = '';
+            }
+            
+            const item = document.createElement('div');
+            item.className = `transcript-item ${type}`;
+            item.textContent = text;
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '0.8em';
+            timeSpan.style.color = '#6c757d';
+            timeSpan.textContent = ` [${timestamp}]`;
+            item.appendChild(timeSpan);
+            
+            transcript.appendChild(item);
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+        
+        function clearTranscript() {
+            const transcript = document.getElementById('transcript');
+            transcript.innerHTML = '<div style="color: #6c757d; text-align: center; padding: 20px;">Transcription will appear here...</div>';
+        }
+        
+        // Prevent accidental page refresh during recording
+        window.addEventListener('beforeunload', function(e) {
+            if (isRecording) {
+                e.preventDefault();
+                e.returnValue = 'Recording is in progress. Are you sure you want to leave?';
+            }
+        });
+    </script>
+</body>
+</html>
