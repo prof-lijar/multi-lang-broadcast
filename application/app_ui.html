@@ -538,6 +538,33 @@
                 <button class="btn btn-danger" onclick="stopAudioOutput()">Stop Audio</button>
             </div>
             
+            <div class="tts-controls" style="margin-top: 15px;">
+                <h3 style="text-align: center; margin-bottom: 15px; color: #333;">🎤 Text-to-Speech Test</h3>
+                <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 10px;">
+                    <input type="text" id="ttsTestText" placeholder="Enter text to speak..." 
+                           style="flex: 1; padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.9em;"
+                           value="Hello, this is a test of the text-to-speech service.">
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 10px;">
+                    <select id="ttsLanguage" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.9em;">
+                        <option value="en-US">English (US)</option>
+                        <option value="ko-KR">한국어</option>
+                        <option value="zh-CN">中文</option>
+                        <option value="ja-JP">日本語</option>
+                    </select>
+                    <select id="ttsVoiceGender" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.9em;">
+                        <option value="NEUTRAL">Neutral</option>
+                        <option value="MALE">Male</option>
+                        <option value="FEMALE">Female</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button class="btn btn-success" onclick="testTTS()">Test TTS</button>
+                    <button class="btn btn-secondary" onclick="testTTSFile()">Generate File</button>
+                    <button class="btn btn-secondary" onclick="getTTSStatus()">TTS Status</button>
+                </div>
+            </div>
+            
             <div class="status idle" id="audioStatus">
                 Audio output will play translated speech on assigned speakers
             </div>
@@ -1002,6 +1029,7 @@
             }
         }
         
+        
         function updateAudioStatus(message, type) {
             const status = document.getElementById('audioStatus');
             status.textContent = message;
@@ -1076,6 +1104,107 @@
             } catch (error) {
                 console.error('Dual audio output error:', error);
                 updateAudioStatus('Audio output failed: ' + error.message, 'error');
+            }
+        }
+        
+        // TTS Functions
+        async function testTTS() {
+            try {
+                const text = document.getElementById('ttsTestText').value;
+                const language = document.getElementById('ttsLanguage').value;
+                const voiceGender = document.getElementById('ttsVoiceGender').value;
+                
+                if (!text.trim()) {
+                    updateAudioStatus('Please enter text to speak', 'error');
+                    return;
+                }
+                
+                updateAudioStatus('Converting text to speech...', 'recording');
+                
+                const response = await fetch('/tts/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        language_code: language,
+                        voice_gender: voiceGender,
+                        play_audio: true,
+                        cleanup: true
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateAudioStatus('TTS test completed successfully', 'idle');
+                    console.log('TTS test result:', result);
+                } else {
+                    throw new Error(result.message || 'TTS test failed');
+                }
+            } catch (error) {
+                console.error('TTS test error:', error);
+                updateAudioStatus('TTS test failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function testTTSFile() {
+            try {
+                const text = document.getElementById('ttsTestText').value;
+                const language = document.getElementById('ttsLanguage').value;
+                const voiceGender = document.getElementById('ttsVoiceGender').value;
+                
+                if (!text.trim()) {
+                    updateAudioStatus('Please enter text to convert', 'error');
+                    return;
+                }
+                
+                updateAudioStatus('Generating TTS file...', 'recording');
+                
+                const response = await fetch('/tts/generate-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        language_code: language,
+                        voice_gender: voiceGender
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateAudioStatus(`TTS file generated: ${result.data.audio_file}`, 'idle');
+                    console.log('TTS file result:', result);
+                } else {
+                    throw new Error(result.message || 'TTS file generation failed');
+                }
+            } catch (error) {
+                console.error('TTS file generation error:', error);
+                updateAudioStatus('TTS file generation failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function getTTSStatus() {
+            try {
+                updateAudioStatus('Getting TTS status...', 'recording');
+                
+                const response = await fetch('/tts/status');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    const stats = result.data;
+                    const statusText = `TTS Status: ${stats.is_initialized ? 'Ready' : 'Not Ready'} | ` +
+                                    `Language: ${stats.language_code} | ` +
+                                    `Voice: ${stats.voice_gender} | ` +
+                                    `Requests: ${stats.stats.total_requests} | ` +
+                                    `Success: ${stats.stats.successful_requests} | ` +
+                                    `Failed: ${stats.stats.failed_requests}`;
+                    updateAudioStatus(statusText, 'idle');
+                    console.log('TTS status:', result);
+                } else {
+                    throw new Error('Failed to get TTS status');
+                }
+            } catch (error) {
+                console.error('TTS status error:', error);
+                updateAudioStatus('Failed to get TTS status: ' + error.message, 'error');
             }
         }
         

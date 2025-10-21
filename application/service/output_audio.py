@@ -16,14 +16,6 @@ import json
 import asyncio
 from datetime import datetime
 
-# Google Cloud Text-to-Speech
-try:
-    from google.cloud import texttospeech
-    from google.oauth2 import service_account
-    TTS_AVAILABLE = True
-except ImportError:
-    TTS_AVAILABLE = False
-    print("Warning: Google Cloud Text-to-Speech not available. Install with: pip install google-cloud-texttospeech")
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +57,6 @@ class AudioOutputService:
         self._playback_process: Optional[subprocess.Popen] = None
         self._playback_lock = threading.Lock()
         
-        # TTS client
-        self.tts_client: Optional[texttospeech.TextToSpeechClient] = None
-        self._tts_initialized = False
         
         # Dual speaker assignments
         self.speaker1_assignment: Optional[SpeakerAssignment] = None
@@ -83,7 +72,6 @@ class AudioOutputService:
             logger.info("Initializing audio output service...")
             self._discover_devices()
             self._set_default_device()
-            self._initialize_tts()
             logger.info(f"Audio service initialized with {len(self.devices)} devices")
             return True
         except Exception as e:
@@ -209,49 +197,7 @@ class AudioOutputService:
         # If no DAC device is available, don't set any current device
         logger.warning("No DAC (USB Audio) devices found, no current device set")
     
-    def _initialize_tts(self) -> None:
-        """Initialize Google Cloud Text-to-Speech client"""
-        if not TTS_AVAILABLE:
-            logger.warning("Google Cloud Text-to-Speech not available")
-            return
-        
-        try:
-            # Find credentials file
-            credentials_path = self._find_credentials_file()
-            if credentials_path:
-                credentials = service_account.Credentials.from_service_account_file(
-                    credentials_path,
-                    scopes=['https://www.googleapis.com/auth/cloud-platform']
-                )
-                self.tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
-                logger.info(f"TTS client initialized with credentials: {credentials_path}")
-            else:
-                # Try default credentials
-                self.tts_client = texttospeech.TextToSpeechClient()
-                logger.info("TTS client initialized with default credentials")
-            
-            self._tts_initialized = True
-            logger.info("Google Cloud Text-to-Speech initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize TTS client: {e}")
-            self._tts_initialized = False
     
-    def _find_credentials_file(self) -> Optional[str]:
-        """Find Google Cloud credentials file"""
-        possible_paths = [
-            "credentials.json",
-            "../credentials.json",
-            "../../credentials.json",
-            os.path.join(os.path.expanduser("~"), "credentials.json"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "credentials.json"),
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(path):
-                return os.path.abspath(path)
-        
-        return None
     
     def get_devices(self) -> List[AudioDevice]:
         """Get list of all available audio devices"""
@@ -523,111 +469,7 @@ class AudioOutputService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
-    def _text_to_speech(self, text: str, language_code: str) -> Optional[str]:
-        """Convert text to speech using Google Cloud TTS"""
-        logger.info(f"TTS request: '{text}' in {language_code}")
-        
-        if not self._tts_initialized or not self.tts_client:
-            logger.error("TTS not initialized")
-            logger.error(f"TTS initialized: {self._tts_initialized}")
-            logger.error(f"TTS client: {self.tts_client}")
-            return None
-        
-        try:
-            # Set up the text input
-            synthesis_input = texttospeech.SynthesisInput(text=text)
-            
-            # Build the voice request
-            voice = texttospeech.VoiceSelectionParams(
-                language_code=language_code,
-                ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
-            )
-            
-            # Select the type of audio file
-            audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3
-            )
-            
-            logger.info(f"Calling Google Cloud TTS API...")
-            # Perform the text-to-speech request
-            response = self.tts_client.synthesize_speech(
-                input=synthesis_input, voice=voice, audio_config=audio_config
-            )
-            
-            logger.info(f"TTS API response received, audio content size: {len(response.audio_content)} bytes")
-            
-            # Save to temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
-                temp_file.write(response.audio_content)
-                temp_file_path = temp_file.name
-            
-            logger.info(f"TTS audio generated: {temp_file_path}")
-            return temp_file_path
-            
-        except Exception as e:
-            logger.error(f"TTS synthesis failed: {e}")
-            import traceback
-            logger.error(f"TTS traceback: {traceback.format_exc()}")
-            return None
     
-    def play_dual_audio(self, text1: str, text2: str, language1: str, language2: str) -> bool:
-        """Play different text on two speakers simultaneously"""
-        logger.info(f"Starting dual audio playback: '{text1}' ({language1}) and '{text2}' ({language2})")
-        
-        if not self.speaker1_assignment or not self.speaker2_assignment:
-            logger.error("Speaker assignments not set")
-            logger.error(f"Speaker1 assignment: {self.speaker1_assignment}")
-            logger.error(f"Speaker2 assignment: {self.speaker2_assignment}")
-            return False
-        
-        try:
-            # Stop any existing dual playback
-            self.stop_dual_playback()
-            
-            # Check if TTS is available
-            if not self._tts_initialized:
-                logger.error("TTS not initialized")
-                return False
-            
-            # Generate TTS audio for both speakers
-            logger.info(f"Generating TTS for speaker 1: '{text1}' in {language1}")
-            audio_file1 = self._text_to_speech(text1, language1)
-            
-            logger.info(f"Generating TTS for speaker 2: '{text2}' in {language2}")
-            audio_file2 = self._text_to_speech(text2, language2)
-            
-            if not audio_file1:
-                logger.error(f"Failed to generate TTS audio for speaker 1: '{text1}'")
-                return False
-            if not audio_file2:
-                logger.error(f"Failed to generate TTS audio for speaker 2: '{text2}'")
-                return False
-            
-            logger.info(f"TTS audio files generated: {audio_file1}, {audio_file2}")
-            
-            # Start dual playback
-            self._start_dual_playback(audio_file1, audio_file2)
-            
-            # Clean up temporary files after a delay
-            def cleanup_files():
-                time.sleep(10)  # Wait for playback to complete
-                try:
-                    if os.path.exists(audio_file1):
-                        os.remove(audio_file1)
-                    if os.path.exists(audio_file2):
-                        os.remove(audio_file2)
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup TTS files: {e}")
-            
-            threading.Thread(target=cleanup_files, daemon=True).start()
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to play dual audio: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
     
     def _start_dual_playback(self, audio_file1: str, audio_file2: str) -> None:
         """Start dual audio playback on assigned speakers"""

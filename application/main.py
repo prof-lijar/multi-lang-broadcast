@@ -13,12 +13,17 @@ import os
 import asyncio
 import json
 import base64
+import logging
 from typing import Dict, Any, List, Optional
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from service.output_audio import get_audio_service, initialize_audio_service
 from service.translate import get_translation_service, initialize_translation_service
 from service.stt import get_stt_service, initialize_stt_service
+from service.tts import get_tts_service, initialize_tts_service
+
+# Logger
+logger = logging.getLogger(__name__)
 
 # Request models
 class TranslationRequest(BaseModel):
@@ -62,6 +67,19 @@ class DualAudioRequest(BaseModel):
 class PlayDualAudioRequest(BaseModel):
     speaker1: Dict[str, Any]
     speaker2: Dict[str, Any]
+
+class TTSRequest(BaseModel):
+    text: str
+    language_code: Optional[str] = "en-US"
+    voice_gender: Optional[str] = "NEUTRAL"
+    play_audio: Optional[bool] = True
+    cleanup: Optional[bool] = True
+
+class TTSFileRequest(BaseModel):
+    text: str
+    language_code: Optional[str] = "en-US"
+    voice_gender: Optional[str] = "NEUTRAL"
+    filename: Optional[str] = None
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -107,6 +125,12 @@ async def startup_event():
             print("✅ STT service initialized successfully")
         else:
             print("⚠️ STT service initialization failed")
+        
+        # Initialize TTS service
+        if initialize_tts_service():
+            print("✅ TTS service initialized successfully")
+        else:
+            print("⚠️ TTS service initialization failed")
             
     except Exception as e:
         print(f"❌ Error initializing services: {e}")
@@ -583,6 +607,205 @@ async def get_supported_stt_languages():
         }
     }
 
+# TTS endpoints
+@app.post("/tts/speak", response_model=Dict[str, Any])
+async def text_to_speech_speak(request: TTSRequest):
+    """Convert text to speech and play it immediately"""
+    try:
+        tts_service = get_tts_service()
+        
+        if not tts_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="TTS service not initialized"
+            )
+        
+        # Set language and voice gender if different from default
+        if request.language_code != tts_service.language_code:
+            tts_service.set_language(request.language_code)
+        if request.voice_gender != str(tts_service.voice_gender):
+            tts_service.set_voice_gender(request.voice_gender)
+        
+        if request.play_audio:
+            # Convert text to speech and play it
+            tts_service.speak(request.text, cleanup=request.cleanup)
+            
+            return {
+                "status": "success",
+                "message": "Text converted to speech and played",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "text": request.text,
+                    "language_code": request.language_code,
+                    "voice_gender": request.voice_gender,
+                    "played": True
+                }
+            }
+        else:
+            # Just convert to audio file without playing
+            audio_file = tts_service.text_to_speech(request.text)
+            
+            return {
+                "status": "success",
+                "message": "Text converted to speech file",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "text": request.text,
+                    "language_code": request.language_code,
+                    "voice_gender": request.voice_gender,
+                    "audio_file": audio_file,
+                    "played": False
+                }
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"TTS failed: {str(e)}"
+        )
+
+@app.post("/tts/generate-file", response_model=Dict[str, Any])
+async def text_to_speech_file(request: TTSFileRequest):
+    """Convert text to speech and return audio file path"""
+    try:
+        tts_service = get_tts_service()
+        
+        if not tts_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="TTS service not initialized"
+            )
+        
+        # Set language and voice gender if different from default
+        if request.language_code != tts_service.language_code:
+            tts_service.set_language(request.language_code)
+        if request.voice_gender != str(tts_service.voice_gender):
+            tts_service.set_voice_gender(request.voice_gender)
+        
+        # Convert text to speech file
+        audio_file = tts_service.text_to_speech(request.text, filename=request.filename)
+        
+        return {
+            "status": "success",
+            "message": "Text converted to speech file",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "text": request.text,
+                "language_code": request.language_code,
+                "voice_gender": request.voice_gender,
+                "audio_file": audio_file
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"TTS file generation failed: {str(e)}"
+        )
+
+@app.get("/tts/status", response_model=Dict[str, Any])
+async def get_tts_status():
+    """Get TTS service status and statistics"""
+    try:
+        tts_service = get_tts_service()
+        stats = tts_service.get_statistics()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get TTS status: {str(e)}"
+        )
+
+@app.post("/tts/reset-stats")
+async def reset_tts_statistics():
+    """Reset TTS service statistics"""
+    try:
+        tts_service = get_tts_service()
+        tts_service.reset_statistics()
+        
+        return {
+            "status": "success",
+            "message": "TTS statistics reset",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset TTS statistics: {str(e)}"
+        )
+
+@app.get("/tts/languages", response_model=Dict[str, Any])
+async def get_supported_tts_languages():
+    """Get list of supported languages for text-to-speech"""
+    # Common Google Text-to-Speech supported languages
+    languages = [
+        {"code": "en-US", "name": "English (US)"},
+        {"code": "en-GB", "name": "English (UK)"},
+        {"code": "en-AU", "name": "English (Australia)"},
+        {"code": "es-ES", "name": "Spanish (Spain)"},
+        {"code": "es-MX", "name": "Spanish (Mexico)"},
+        {"code": "fr-FR", "name": "French (France)"},
+        {"code": "de-DE", "name": "German (Germany)"},
+        {"code": "it-IT", "name": "Italian (Italy)"},
+        {"code": "pt-BR", "name": "Portuguese (Brazil)"},
+        {"code": "pt-PT", "name": "Portuguese (Portugal)"},
+        {"code": "ru-RU", "name": "Russian (Russia)"},
+        {"code": "ja-JP", "name": "Japanese (Japan)"},
+        {"code": "ko-KR", "name": "Korean (South Korea)"},
+        {"code": "zh-CN", "name": "Chinese (Simplified)"},
+        {"code": "zh-TW", "name": "Chinese (Traditional)"},
+        {"code": "ar-SA", "name": "Arabic (Saudi Arabia)"},
+        {"code": "hi-IN", "name": "Hindi (India)"},
+        {"code": "th-TH", "name": "Thai (Thailand)"},
+        {"code": "vi-VN", "name": "Vietnamese (Vietnam)"},
+        {"code": "nl-NL", "name": "Dutch (Netherlands)"},
+        {"code": "sv-SE", "name": "Swedish (Sweden)"},
+        {"code": "no-NO", "name": "Norwegian (Norway)"},
+        {"code": "da-DK", "name": "Danish (Denmark)"},
+        {"code": "fi-FI", "name": "Finnish (Finland)"},
+        {"code": "pl-PL", "name": "Polish (Poland)"},
+        {"code": "tr-TR", "name": "Turkish (Turkey)"},
+        {"code": "cs-CZ", "name": "Czech (Czech Republic)"},
+        {"code": "hu-HU", "name": "Hungarian (Hungary)"},
+        {"code": "ro-RO", "name": "Romanian (Romania)"},
+        {"code": "bg-BG", "name": "Bulgarian (Bulgaria)"},
+        {"code": "hr-HR", "name": "Croatian (Croatia)"},
+        {"code": "sk-SK", "name": "Slovak (Slovakia)"},
+        {"code": "sl-SI", "name": "Slovenian (Slovenia)"},
+        {"code": "et-EE", "name": "Estonian (Estonia)"},
+        {"code": "lv-LV", "name": "Latvian (Latvia)"},
+        {"code": "lt-LT", "name": "Lithuanian (Lithuania)"},
+        {"code": "el-GR", "name": "Greek (Greece)"},
+        {"code": "he-IL", "name": "Hebrew (Israel)"},
+        {"code": "id-ID", "name": "Indonesian (Indonesia)"},
+        {"code": "ms-MY", "name": "Malay (Malaysia)"},
+        {"code": "tl-PH", "name": "Filipino (Philippines)"},
+        {"code": "uk-UA", "name": "Ukrainian (Ukraine)"},
+        {"code": "ca-ES", "name": "Catalan (Spain)"},
+        {"code": "eu-ES", "name": "Basque (Spain)"},
+        {"code": "gl-ES", "name": "Galician (Spain)"}
+    ]
+    
+    return {
+        "status": "success",
+        "timestamp": datetime.utcnow().isoformat(),
+        "data": {
+            "languages": languages,
+            "count": len(languages)
+        }
+    }
+
 # WebSocket endpoint for real-time audio streaming
 @app.websocket("/stt/ws")
 async def websocket_speech_to_text(websocket: WebSocket):
@@ -809,12 +1032,11 @@ async def play_dual_audio(request: PlayDualAudioRequest):
             speaker2=request.speaker2
         )
         
-        # Play dual audio with specified texts and languages
-        success = audio_service.play_dual_audio(
-            text1=request.speaker1.get('text', ''),
-            text2=request.speaker2.get('text', ''),
-            language1=request.speaker1.get('language', 'en'),
-            language2=request.speaker2.get('language', 'ko')
+        # Note: TTS functionality has been removed
+        # This endpoint is no longer functional
+        raise HTTPException(
+            status_code=501,
+            detail="TTS functionality has been removed. Use test-simple endpoint instead."
         )
         
         if success:
@@ -839,7 +1061,7 @@ async def play_dual_audio(request: PlayDualAudioRequest):
 
 @app.post("/audio-output/test-simple", response_model=Dict[str, Any])
 async def test_simple_dual_audio():
-    """Test dual audio with simple tones (no TTS required)"""
+    """Test dual audio with simple tones"""
     try:
         audio_service = get_audio_service()
         
@@ -864,6 +1086,7 @@ async def test_simple_dual_audio():
             status_code=500,
             detail=f"Failed to test simple dual audio: {str(e)}"
         )
+
 
 if __name__ == "__main__":
     # Get configuration from environment variables
