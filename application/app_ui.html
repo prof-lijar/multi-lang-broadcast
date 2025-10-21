@@ -44,6 +44,10 @@
             border-left: 5px solid #28a745;
         }
         
+        .audio-panel {
+            border-left: 5px solid #ff6b35;
+        }
+        
         h1 {
             color: #333;
             margin-bottom: 20px;
@@ -346,6 +350,78 @@
         .hidden {
             display: none;
         }
+        
+        .speaker-assignment {
+            margin-bottom: 20px;
+        }
+        
+        .speaker-assignment label {
+            display: block;
+            margin-bottom: 10px;
+            color: #666;
+            font-weight: 500;
+            text-align: center;
+        }
+        
+        .speaker-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .speaker-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .speaker-control label {
+            min-width: 80px;
+            margin: 0;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .speaker-select, .device-select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            font-size: 0.9em;
+        }
+        
+        .speaker-select:focus, .device-select:focus {
+            outline: none;
+            border-color: #ff6b35;
+        }
+        
+        .audio-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+        
+        .audio-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .audio-info-item {
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .audio-info-item:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body>
@@ -420,6 +496,61 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Audio Output Panel -->
+        <div class="panel audio-panel">
+            <h2>🔊 Audio Output</h2>
+            
+            <div class="speaker-assignment">
+                <label>Speaker Language Assignment:</label>
+                <div class="speaker-controls">
+                    <div class="speaker-control">
+                        <label>Speaker 1:</label>
+                        <select id="speaker1Language" class="speaker-select">
+                            <option value="en">English</option>
+                            <option value="ko">한국어</option>
+                            <option value="zh">中文</option>
+                            <option value="ja">日本語</option>
+                        </select>
+                        <select id="speaker1Device" class="device-select">
+                            <option value="">Select Device...</option>
+                        </select>
+                    </div>
+                    <div class="speaker-control">
+                        <label>Speaker 2:</label>
+                        <select id="speaker2Language" class="speaker-select">
+                            <option value="ko">한국어</option>
+                            <option value="en">English</option>
+                            <option value="zh">中文</option>
+                            <option value="ja">日本語</option>
+                        </select>
+                        <select id="speaker2Device" class="device-select">
+                            <option value="">Select Device...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="audio-controls">
+                <button class="btn btn-secondary" onclick="refreshAudioDevices()">Refresh Devices</button>
+                <button class="btn btn-success" onclick="testAudioOutput()">Test Audio</button>
+                <button class="btn btn-secondary" onclick="testSimpleAudio()">Test Simple</button>
+                <button class="btn btn-danger" onclick="stopAudioOutput()">Stop Audio</button>
+            </div>
+            
+            <div class="status idle" id="audioStatus">
+                Audio output will play translated speech on assigned speakers
+            </div>
+            
+            <div class="audio-info">
+                <div class="audio-info-item">
+                    <strong>Speaker 1:</strong> <span id="speaker1Info">Not assigned</span>
+                </div>
+                <div class="audio-info-item">
+                    <strong>Speaker 2:</strong> <span id="speaker2Info">Not assigned</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -438,6 +569,11 @@
         };
         let translationEnabled = false;
         let lastTranslatedText = '';
+        let audioDevices = [];
+        let speakerAssignments = {
+            speaker1: { language: 'en', device: null },
+            speaker2: { language: 'ko', device: null }
+        };
         
         // STT Language selection
         document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -617,6 +753,9 @@
                     lastTranslatedText = text;
                     updateTranslateStatus('Translation complete', 'idle');
                     console.log('Translation successful:', result.data.translated_text);
+                    
+                    // Trigger dual audio output if speakers are assigned
+                    triggerDualAudioOutput(text, result.data.translated_text, result.data.source_language, result.data.target_language);
                 } else {
                     console.error('Translation failed:', result);
                     throw new Error('Translation failed: ' + (result.error || 'Unknown error'));
@@ -717,6 +856,233 @@
             console.log('Testing translation with sample text');
             translateText('Hello, this is a test translation');
         }
+        
+        // Audio Output Functions
+        async function refreshAudioDevices() {
+            try {
+                updateAudioStatus('Loading audio devices...', 'recording');
+                const response = await fetch('/audio-output-devices');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    audioDevices = result.data.devices;
+                    populateDeviceSelectors();
+                    updateAudioStatus('Audio devices loaded', 'idle');
+                } else {
+                    throw new Error('Failed to load audio devices');
+                }
+            } catch (error) {
+                console.error('Error loading audio devices:', error);
+                updateAudioStatus('Error loading devices: ' + error.message, 'error');
+            }
+        }
+        
+        function populateDeviceSelectors() {
+            const speaker1Select = document.getElementById('speaker1Device');
+            const speaker2Select = document.getElementById('speaker2Device');
+            
+            // Clear existing options
+            speaker1Select.innerHTML = '<option value="">Select Device...</option>';
+            speaker2Select.innerHTML = '<option value="">Select Device...</option>';
+            
+            // Add device options
+            audioDevices.forEach(device => {
+                const option1 = document.createElement('option');
+                option1.value = device.card_id;
+                option1.textContent = `${device.name} (${device.description})`;
+                speaker1Select.appendChild(option1);
+                
+                const option2 = document.createElement('option');
+                option2.value = device.card_id;
+                option2.textContent = `${device.name} (${device.description})`;
+                speaker2Select.appendChild(option2);
+            });
+        }
+        
+        function updateSpeakerAssignments() {
+            const speaker1Lang = document.getElementById('speaker1Language').value;
+            const speaker1Device = document.getElementById('speaker1Device').value;
+            const speaker2Lang = document.getElementById('speaker2Language').value;
+            const speaker2Device = document.getElementById('speaker2Device').value;
+            
+            // Convert device IDs to integers
+            speakerAssignments.speaker1 = { 
+                language: speaker1Lang, 
+                device: speaker1Device ? parseInt(speaker1Device) : null 
+            };
+            speakerAssignments.speaker2 = { 
+                language: speaker2Lang, 
+                device: speaker2Device ? parseInt(speaker2Device) : null 
+            };
+            
+            // Update info display
+            const speaker1Info = document.getElementById('speaker1Info');
+            const speaker2Info = document.getElementById('speaker2Info');
+            
+            if (speaker1Device) {
+                const device = audioDevices.find(d => d.card_id == speaker1Device);
+                speaker1Info.textContent = `${speaker1Lang.toUpperCase()} → ${device ? device.name : 'Unknown'}`;
+            } else {
+                speaker1Info.textContent = 'Not assigned';
+            }
+            
+            if (speaker2Device) {
+                const device = audioDevices.find(d => d.card_id == speaker2Device);
+                speaker2Info.textContent = `${speaker2Lang.toUpperCase()} → ${device ? device.name : 'Unknown'}`;
+            } else {
+                speaker2Info.textContent = 'Not assigned';
+            }
+        }
+        
+        async function testAudioOutput() {
+            try {
+                // Check if both speakers are assigned
+                if (!speakerAssignments.speaker1.device || !speakerAssignments.speaker2.device) {
+                    updateAudioStatus('Please assign both speakers before testing', 'error');
+                    return;
+                }
+                
+                updateAudioStatus('Testing audio output...', 'recording');
+                
+                console.log('Sending test request:', {
+                    speaker1: speakerAssignments.speaker1,
+                    speaker2: speakerAssignments.speaker2
+                });
+                
+                const response = await fetch('/audio-output/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        speaker1: speakerAssignments.speaker1,
+                        speaker2: speakerAssignments.speaker2,
+                        test_text: 'Hello, this is a test of dual speaker audio output.'
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateAudioStatus('Audio test completed', 'idle');
+                } else {
+                    throw new Error(result.message || 'Audio test failed');
+                }
+            } catch (error) {
+                console.error('Audio test error:', error);
+                updateAudioStatus('Audio test failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function stopAudioOutput() {
+            try {
+                const response = await fetch('/audio-output/stop', { method: 'POST' });
+                const result = await response.json();
+                updateAudioStatus('Audio output stopped', 'idle');
+            } catch (error) {
+                console.error('Error stopping audio:', error);
+                updateAudioStatus('Error stopping audio: ' + error.message, 'error');
+            }
+        }
+        
+        async function testSimpleAudio() {
+            try {
+                updateAudioStatus('Testing simple dual audio...', 'recording');
+                
+                const response = await fetch('/audio-output/test-simple', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateAudioStatus('Simple audio test started', 'idle');
+                } else {
+                    throw new Error(result.message || 'Simple audio test failed');
+                }
+            } catch (error) {
+                console.error('Simple audio test error:', error);
+                updateAudioStatus('Simple audio test failed: ' + error.message, 'error');
+            }
+        }
+        
+        function updateAudioStatus(message, type) {
+            const status = document.getElementById('audioStatus');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Event listeners for speaker assignments
+        document.getElementById('speaker1Language').addEventListener('change', updateSpeakerAssignments);
+        document.getElementById('speaker1Device').addEventListener('change', updateSpeakerAssignments);
+        document.getElementById('speaker2Language').addEventListener('change', updateSpeakerAssignments);
+        document.getElementById('speaker2Device').addEventListener('change', updateSpeakerAssignments);
+        
+        // Trigger dual audio output when translation is complete
+        async function triggerDualAudioOutput(originalText, translatedText, sourceLanguage, targetLanguage) {
+            // Check if speakers are assigned
+            if (!speakerAssignments.speaker1.device || !speakerAssignments.speaker2.device) {
+                console.log('Speakers not assigned, skipping audio output');
+                return;
+            }
+            
+            try {
+                console.log('Triggering dual audio output...');
+                updateAudioStatus('Playing translated audio...', 'recording');
+                
+                // Determine which text goes to which speaker based on language assignments
+                let speaker1Text, speaker2Text, speaker1Lang, speaker2Lang;
+                
+                if (speakerAssignments.speaker1.language === sourceLanguage) {
+                    speaker1Text = originalText;
+                    speaker1Lang = sourceLanguage;
+                    speaker2Text = translatedText;
+                    speaker2Lang = targetLanguage;
+                } else if (speakerAssignments.speaker1.language === targetLanguage) {
+                    speaker1Text = translatedText;
+                    speaker1Lang = targetLanguage;
+                    speaker2Text = originalText;
+                    speaker2Lang = sourceLanguage;
+                } else {
+                    // Default assignment
+                    speaker1Text = originalText;
+                    speaker1Lang = sourceLanguage;
+                    speaker2Text = translatedText;
+                    speaker2Lang = targetLanguage;
+                }
+                
+                // Call the dual audio API
+                const response = await fetch('/audio-output/play-dual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        speaker1: {
+                            text: speaker1Text,
+                            language: speaker1Lang,
+                            device: speakerAssignments.speaker1.device
+                        },
+                        speaker2: {
+                            text: speaker2Text,
+                            language: speaker2Lang,
+                            device: speakerAssignments.speaker2.device
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    updateAudioStatus('Audio playback started', 'idle');
+                    console.log('Dual audio output started successfully');
+                } else {
+                    throw new Error(result.message || 'Failed to start dual audio');
+                }
+                
+            } catch (error) {
+                console.error('Dual audio output error:', error);
+                updateAudioStatus('Audio output failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Load audio devices on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshAudioDevices();
+        });
         
         // Prevent accidental page refresh during recording
         window.addEventListener('beforeunload', function(e) {

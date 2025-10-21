@@ -50,6 +50,19 @@ class STTFileRequest(BaseModel):
     language_code: Optional[str] = "en-US"
     sample_rate: Optional[int] = 16000
 
+class SpeakerAssignmentRequest(BaseModel):
+    speaker1: Dict[str, Any]
+    speaker2: Dict[str, Any]
+
+class DualAudioRequest(BaseModel):
+    speaker1: Dict[str, Any]
+    speaker2: Dict[str, Any]
+    test_text: Optional[str] = "Hello, this is a test of dual speaker audio output."
+
+class PlayDualAudioRequest(BaseModel):
+    speaker1: Dict[str, Any]
+    speaker2: Dict[str, Any]
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Multi-Language Broadcast API",
@@ -648,6 +661,209 @@ async def websocket_speech_to_text(websocket: WebSocket):
                 await websocket.close()
             except:
                 pass
+
+# Audio Output endpoints
+@app.post("/audio-output/assign-speakers", response_model=Dict[str, Any])
+async def assign_speakers(request: SpeakerAssignmentRequest):
+    """Assign speakers for dual audio output"""
+    try:
+        audio_service = get_audio_service()
+        
+        success = audio_service.set_speaker_assignments(
+            speaker1=request.speaker1,
+            speaker2=request.speaker2
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Speaker assignments updated",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "speaker1": request.speaker1,
+                    "speaker2": request.speaker2
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to set speaker assignments"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to assign speakers: {str(e)}"
+        )
+
+@app.post("/audio-output/test", response_model=Dict[str, Any])
+async def test_dual_audio(request: DualAudioRequest):
+    """Test dual audio output with assigned speakers using test_audio.wav"""
+    try:
+        audio_service = get_audio_service()
+        
+        print(f"Test request received: speaker1={request.speaker1}, speaker2={request.speaker2}")
+        
+        # Set speaker assignments
+        assignment_success = audio_service.set_speaker_assignments(
+            speaker1=request.speaker1,
+            speaker2=request.speaker2
+        )
+        
+        if not assignment_success:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to set speaker assignments"
+            )
+        
+        print(f"Speaker assignments set successfully")
+        print(f"Speaker1 assignment: {audio_service.speaker1_assignment}")
+        print(f"Speaker2 assignment: {audio_service.speaker2_assignment}")
+        
+        # Use the simple test method that plays test_audio.wav
+        success = audio_service.test_dual_playback_simple()
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Dual audio test started with test_audio.wav",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to start dual audio test - check server logs for details"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Test dual audio error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to test dual audio: {str(e)}"
+        )
+
+@app.post("/audio-output/stop", response_model=Dict[str, Any])
+async def stop_dual_audio():
+    """Stop dual audio playback"""
+    try:
+        audio_service = get_audio_service()
+        audio_service.stop_dual_playback()
+        
+        return {
+            "status": "success",
+            "message": "Dual audio playback stopped",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to stop dual audio: {str(e)}"
+        )
+
+@app.get("/audio-output/status", response_model=Dict[str, Any])
+async def get_audio_output_status():
+    """Get audio output service status"""
+    try:
+        audio_service = get_audio_service()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "is_dual_playing": audio_service.is_dual_playing(),
+                "speaker1_assignment": {
+                    "language": audio_service.speaker1_assignment.language if audio_service.speaker1_assignment else None,
+                    "device_id": audio_service.speaker1_assignment.device_id if audio_service.speaker1_assignment else None,
+                    "device_name": audio_service.speaker1_assignment.device_name if audio_service.speaker1_assignment else None
+                },
+                "speaker2_assignment": {
+                    "language": audio_service.speaker2_assignment.language if audio_service.speaker2_assignment else None,
+                    "device_id": audio_service.speaker2_assignment.device_id if audio_service.speaker2_assignment else None,
+                    "device_name": audio_service.speaker2_assignment.device_name if audio_service.speaker2_assignment else None
+                }
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get audio output status: {str(e)}"
+        )
+
+@app.post("/audio-output/play-dual", response_model=Dict[str, Any])
+async def play_dual_audio(request: PlayDualAudioRequest):
+    """Play dual audio with specific text and language assignments"""
+    try:
+        audio_service = get_audio_service()
+        
+        # Set speaker assignments
+        audio_service.set_speaker_assignments(
+            speaker1=request.speaker1,
+            speaker2=request.speaker2
+        )
+        
+        # Play dual audio with specified texts and languages
+        success = audio_service.play_dual_audio(
+            text1=request.speaker1.get('text', ''),
+            text2=request.speaker2.get('text', ''),
+            language1=request.speaker1.get('language', 'en'),
+            language2=request.speaker2.get('language', 'ko')
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Dual audio playback started",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to start dual audio playback"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to play dual audio: {str(e)}"
+        )
+
+@app.post("/audio-output/test-simple", response_model=Dict[str, Any])
+async def test_simple_dual_audio():
+    """Test dual audio with simple tones (no TTS required)"""
+    try:
+        audio_service = get_audio_service()
+        
+        success = audio_service.test_dual_playback_simple()
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Simple dual audio test started",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to start simple dual audio test"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to test simple dual audio: {str(e)}"
+        )
 
 if __name__ == "__main__":
     # Get configuration from environment variables
