@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Transcription</title>
+    <title>Live Transcription & Translation</title>
     <style>
         * {
             margin: 0;
@@ -15,31 +15,53 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             padding: 20px;
         }
         
-        .container {
+        .main-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            min-height: calc(100vh - 40px);
+        }
+        
+        .panel {
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-            text-align: center;
+            padding: 30px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stt-panel {
+            border-left: 5px solid #667eea;
+        }
+        
+        .translate-panel {
+            border-left: 5px solid #28a745;
         }
         
         h1 {
             color: #333;
-            margin-bottom: 30px;
-            font-size: 2.5em;
+            margin-bottom: 20px;
+            font-size: 2em;
             font-weight: 300;
+            text-align: center;
+        }
+        
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            font-weight: 400;
+            text-align: center;
         }
         
         .language-selector {
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         
         .language-selector label {
@@ -47,24 +69,38 @@
             margin-bottom: 10px;
             color: #666;
             font-weight: 500;
+            text-align: center;
         }
         
         .language-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             justify-content: center;
             flex-wrap: wrap;
         }
         
+        .translate-language-selector {
+            margin-bottom: 20px;
+        }
+        
+        .translate-language-selector label {
+            display: block;
+            margin-bottom: 10px;
+            color: #666;
+            font-weight: 500;
+            text-align: center;
+        }
+        
         .lang-btn {
-            padding: 12px 24px;
+            padding: 10px 20px;
             border: 2px solid #e0e0e0;
             background: white;
-            border-radius: 25px;
+            border-radius: 20px;
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 500;
             color: #666;
+            font-size: 0.9em;
         }
         
         .lang-btn:hover {
@@ -78,13 +114,37 @@
             color: white;
         }
         
+        .translate-lang-btn {
+            padding: 10px 20px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .translate-lang-btn:hover {
+            border-color: #28a745;
+            color: #28a745;
+        }
+        
+        .translate-lang-btn.active {
+            background: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+        
         .mic-container {
-            margin: 40px 0;
+            margin: 20px 0;
+            text-align: center;
         }
         
         .mic-button {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             border: none;
             background: #f0f0f0;
@@ -94,7 +154,7 @@
             align-items: center;
             justify-content: center;
             margin: 0 auto;
-            font-size: 2em;
+            font-size: 1.8em;
         }
         
         .mic-button:hover {
@@ -145,26 +205,51 @@
         }
         
         .transcript-container {
-            margin-top: 30px;
+            margin-top: 20px;
             text-align: left;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
         
         .transcript {
             background: #f8f9fa;
             border: 1px solid #e9ecef;
             border-radius: 10px;
-            padding: 20px;
-            min-height: 150px;
-            max-height: 300px;
+            padding: 15px;
+            min-height: 200px;
+            max-height: 400px;
             overflow-y: auto;
-            font-size: 1.1em;
-            line-height: 1.6;
+            font-size: 1em;
+            line-height: 1.5;
+            flex: 1;
+        }
+        
+        .translation-container {
+            margin-top: 20px;
+            text-align: left;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .translation {
+            background: #f0f8f0;
+            border: 1px solid #d4edda;
+            border-radius: 10px;
+            padding: 15px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 1em;
+            line-height: 1.5;
+            flex: 1;
         }
         
         .transcript-item {
-            margin-bottom: 10px;
-            padding: 8px 12px;
-            border-radius: 8px;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
         }
         
         .transcript-item.interim {
@@ -184,20 +269,51 @@
             color: #721c24;
         }
         
+        .translation-item {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
+        }
+        
+        .translation-item.interim {
+            background: #fff3cd;
+            color: #856404;
+            font-style: italic;
+        }
+        
+        .translation-item.final {
+            background: #d4edda;
+            color: #155724;
+            font-weight: 500;
+        }
+        
+        .translation-item.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
         .controls {
-            margin-top: 20px;
+            margin-top: 15px;
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            justify-content: center;
+        }
+        
+        .translate-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 8px;
             justify-content: center;
         }
         
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
-            border-radius: 25px;
+            border-radius: 20px;
             cursor: pointer;
             font-weight: 500;
             transition: all 0.3s ease;
+            font-size: 0.9em;
         }
         
         .btn-secondary {
@@ -218,62 +334,120 @@
             background: #c82333;
         }
         
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
         .hidden {
             display: none;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎤 Live Transcription</h1>
-        
-        <div class="language-selector">
-            <label>Select Language:</label>
-            <div class="language-buttons">
-                <button class="lang-btn active" data-lang="en-US">English</button>
-                <button class="lang-btn" data-lang="ko-KR">한국어</button>
-                <button class="lang-btn" data-lang="zh-CN">中文</button>
-                <button class="lang-btn" data-lang="th-TH">ไทย</button>
+    <div class="main-container">
+        <!-- STT Panel -->
+        <div class="panel stt-panel">
+            <h2>🎤 Speech-to-Text</h2>
+            
+            <div class="language-selector">
+                <label>Input Language:</label>
+                <div class="language-buttons">
+                    <button class="lang-btn active" data-lang="en-US">English</button>
+                    <button class="lang-btn" data-lang="ko-KR">한국어</button>
+                    <button class="lang-btn" data-lang="zh-CN">中文</button>
+                    <button class="lang-btn" data-lang="ja-JP">日本語</button>
+                </div>
             </div>
-        </div>
-        
-        <div class="mic-container">
-            <button class="mic-button" id="micButton" onclick="toggleRecording()">
-                🎤
-            </button>
-        </div>
-        
-        <div class="status idle" id="status">
-            Click the microphone to start recording
-        </div>
-        
-        <div class="transcript-container">
-            <div class="transcript" id="transcript">
-                <div style="color: #6c757d; text-align: center; padding: 20px;">
-                    Transcription will appear here...
+            
+            <div class="controls">
+                <button class="btn btn-secondary" onclick="clearTranscript()">Clear</button>
+                <button class="btn btn-danger hidden" id="stopButton" onclick="stopRecording()">Stop</button>
+            </div>
+            
+            <div class="mic-container">
+                <button class="mic-button" id="micButton" onclick="toggleRecording()">
+                    🎤
+                </button>
+            </div>
+            
+            <div class="status idle" id="status">
+                Click the microphone to start recording
+            </div>
+            
+            <div class="transcript-container">
+                <div class="transcript" id="transcript">
+                    <div style="color: #6c757d; text-align: center; padding: 20px;">
+                        Transcription will appear here...
+                    </div>
                 </div>
             </div>
         </div>
         
-        <div class="controls">
-            <button class="btn btn-secondary" onclick="clearTranscript()">Clear</button>
-            <button class="btn btn-danger hidden" id="stopButton" onclick="stopRecording()">Stop</button>
+        <!-- Translation Panel -->
+        <div class="panel translate-panel">
+            <h2>🌐 Live Translation</h2>
+            
+            <div class="translate-language-selector">
+                <label>Translate to:</label>
+                <div class="language-buttons">
+                    <button class="translate-lang-btn active" data-lang="en">English</button>
+                    <button class="translate-lang-btn" data-lang="ko">한국어</button>
+                    <button class="translate-lang-btn" data-lang="zh">中文</button>
+                    <button class="translate-lang-btn" data-lang="ja">日本語</button>
+                </div>
+            </div>
+            
+            <div class="translate-controls">
+                <button class="btn btn-secondary" onclick="clearTranslation()">Clear</button>
+                <button class="btn btn-success" onclick="toggleTranslation()" id="translateToggle">Enable Translation</button>
+                <button class="btn btn-secondary" onclick="testTranslation()">Test Translation</button>
+            </div>
+            
+            <div class="status idle" id="translateStatus">
+                Translation will appear here when speech is detected
+            </div>
+            
+            <div class="translation-container">
+                <div class="translation" id="translation">
+                    <div style="color: #6c757d; text-align: center; padding: 20px;">
+                        Translation will appear here...
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
         let isRecording = false;
         let currentLanguage = 'en-US';
+        let currentTranslateLanguage = 'en';
         let streamReader = null;
         let abortController = null;
+        let translationEnabled = false;
+        let lastTranslatedText = '';
         
-        // Language selection
+        // STT Language selection
         document.querySelectorAll('.lang-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
                 currentLanguage = this.dataset.lang;
-                console.log('Selected language:', currentLanguage);
+                console.log('Selected STT language:', currentLanguage);
+            });
+        });
+        
+        // Translation Language selection
+        document.querySelectorAll('.translate-lang-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.translate-lang-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentTranslateLanguage = this.dataset.lang;
+                console.log('Selected translation language:', currentTranslateLanguage);
             });
         });
         
@@ -370,6 +544,7 @@
         }
         
         function handleTranscriptionResult(data) {
+            console.log('handleTranscriptionResult called with:', data);
             const transcript = document.getElementById('transcript');
             
             if (data.type === 'error') {
@@ -379,6 +554,88 @@
             
             if (data.transcript && data.transcript.trim()) {
                 addTranscriptItem(data.transcript, data.type);
+                
+                // If translation is enabled, translate both interim and final results
+                if (translationEnabled) {
+                    console.log('Calling translateText for result:', data.transcript, 'type:', data.type);
+                    translateText(data.transcript);
+                } else {
+                    console.log('Not translating - translationEnabled:', translationEnabled, 'type:', data.type);
+                }
+            }
+        }
+        
+        async function translateText(text) {
+            console.log('translateText called with:', text);
+            console.log('translationEnabled:', translationEnabled);
+            console.log('currentTranslateLanguage:', currentTranslateLanguage);
+            
+            if (!text || text.trim() === '') {
+                console.log('Skipping translation - empty text');
+                return;
+            }
+            
+            // Only skip if it's exactly the same as the last translated text
+            if (text === lastTranslatedText) {
+                console.log('Skipping translation - duplicate text');
+                return;
+            }
+            
+            try {
+                updateTranslateStatus('Translating...', 'recording');
+                console.log('Starting translation request...');
+                
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        target_language: currentTranslateLanguage
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Translation failed: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Translation API response:', result);
+                
+                if (result.status === 'success' && result.data && result.data.translated_text) {
+                    addTranslationItem(result.data.translated_text, 'final');
+                    lastTranslatedText = text;
+                    updateTranslateStatus('Translation complete', 'idle');
+                    console.log('Translation successful:', result.data.translated_text);
+                } else {
+                    console.error('Translation failed:', result);
+                    throw new Error('Translation failed: ' + (result.error || 'Unknown error'));
+                }
+                
+            } catch (error) {
+                console.error('Translation error:', error);
+                addTranslationItem('Translation error: ' + error.message, 'error');
+                updateTranslateStatus('Translation failed', 'error');
+            }
+        }
+        
+        function toggleTranslation() {
+            translationEnabled = !translationEnabled;
+            const toggleBtn = document.getElementById('translateToggle');
+            
+            console.log('toggleTranslation called, translationEnabled is now:', translationEnabled);
+            
+            if (translationEnabled) {
+                toggleBtn.textContent = 'Disable Translation';
+                toggleBtn.classList.remove('btn-success');
+                toggleBtn.classList.add('btn-danger');
+                updateTranslateStatus('Translation enabled', 'recording');
+            } else {
+                toggleBtn.textContent = 'Enable Translation';
+                toggleBtn.classList.remove('btn-danger');
+                toggleBtn.classList.add('btn-success');
+                updateTranslateStatus('Translation disabled', 'idle');
             }
         }
         
@@ -406,9 +663,50 @@
             transcript.scrollTop = transcript.scrollHeight;
         }
         
+        function addTranslationItem(text, type) {
+            const translation = document.getElementById('translation');
+            
+            // Clear placeholder if it exists
+            if (translation.children.length === 1 && translation.children[0].style.color === 'rgb(108, 117, 125)') {
+                translation.innerHTML = '';
+            }
+            
+            const item = document.createElement('div');
+            item.className = `translation-item ${type}`;
+            item.textContent = text;
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '0.8em';
+            timeSpan.style.color = '#6c757d';
+            timeSpan.textContent = ` [${timestamp}]`;
+            item.appendChild(timeSpan);
+            
+            translation.appendChild(item);
+            translation.scrollTop = translation.scrollHeight;
+        }
+        
+        function updateTranslateStatus(message, type) {
+            const status = document.getElementById('translateStatus');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
         function clearTranscript() {
             const transcript = document.getElementById('transcript');
             transcript.innerHTML = '<div style="color: #6c757d; text-align: center; padding: 20px;">Transcription will appear here...</div>';
+        }
+        
+        function clearTranslation() {
+            const translation = document.getElementById('translation');
+            translation.innerHTML = '<div style="color: #6c757d; text-align: center; padding: 20px;">Translation will appear here...</div>';
+            lastTranslatedText = '';
+        }
+        
+        function testTranslation() {
+            console.log('Testing translation with sample text');
+            translateText('Hello, this is a test translation');
         }
         
         // Prevent accidental page refresh during recording

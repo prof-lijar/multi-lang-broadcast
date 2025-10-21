@@ -64,9 +64,9 @@ class STTService:
         self.stream = None
         self.is_streaming = False
         
-        # Threading for performance
-        self.audio_queue = queue.Queue(maxsize=10)
-        self.result_queue = queue.Queue(maxsize=50)
+        # Threading for performance - increased queue sizes for better buffering
+        self.audio_queue = queue.Queue(maxsize=100)  # Increased from 10 to 100
+        self.result_queue = queue.Queue(maxsize=200)  # Increased from 50 to 200
         
         # Performance metrics
         self.start_time = None
@@ -77,6 +77,10 @@ class STTService:
         # Debouncing for results
         self.last_result_time = 0
         self.debounce_interval = 0.1  # 100ms debounce interval
+        
+        # Heartbeat mechanism to keep streaming active
+        self.last_heartbeat = time.time()
+        self.heartbeat_interval = 5.0  # Send heartbeat every 5 seconds
         
         # Track last results to prevent duplicates
         self.last_final_transcript = ""
@@ -137,33 +141,54 @@ class STTService:
         """Audio callback for real-time streaming."""
         if self.is_streaming:
             try:
+                # Try to put audio data with timeout to prevent blocking
                 self.audio_queue.put_nowait(in_data)
                 # Debug: print when we receive audio data
                 if self.processed_chunks % 100 == 0:  # Print every 100 chunks
                     print(f"🎤 Audio callback: received {len(in_data)} bytes, chunk {self.processed_chunks}")
             except queue.Full:
-                # Drop oldest audio if queue is full to maintain low latency
+                # Clear some old audio data to make room for new data
                 try:
-                    self.audio_queue.get_nowait()
+                    # Remove up to 5 old chunks to make room
+                    for _ in range(min(5, self.audio_queue.qsize())):
+                        self.audio_queue.get_nowait()
                     self.audio_queue.put_nowait(in_data)
+                    print(f"⚠️ Audio queue full, cleared old chunks to make room")
                 except queue.Empty:
-                    pass
+                    # If queue is empty, just put the new data
+                    try:
+                        self.audio_queue.put_nowait(in_data)
+                    except queue.Full:
+                        print(f"⚠️ Audio queue still full, dropping audio chunk")
         return (None, pyaudio.paContinue)
     
     def _process_audio_stream(self, language_code: str = None):
         """Process audio stream in separate thread for better performance."""
         def audio_generator() -> Generator[bytes, None, None]:
             """Generate audio chunks for streaming recognition."""
+            consecutive_empty_count = 0
+            max_consecutive_empty = 100  # Allow up to 10 seconds of no audio before giving up
+            
             while self.is_streaming:
                 try:
-                    # Get audio chunk with timeout to prevent blocking
-                    chunk = self.audio_queue.get(timeout=0.1)
+                    # Get audio chunk with shorter timeout for more responsive processing
+                    chunk = self.audio_queue.get(timeout=0.05)  # Reduced from 0.1 to 0.05
                     yield chunk
                     self.processed_chunks += 1
+                    consecutive_empty_count = 0  # Reset counter on successful chunk
+                    
                     # Debug: print when we process audio chunks
                     if self.processed_chunks % 50 == 0:  # Print every 50 chunks
                         print(f"🔄 Processing audio chunk {self.processed_chunks}, size: {len(chunk)} bytes")
+                        
                 except queue.Empty:
+                    consecutive_empty_count += 1
+                    if consecutive_empty_count > max_consecutive_empty:
+                        print(f"⚠️ No audio data for {max_consecutive_empty * 0.05} seconds, checking if streaming should continue")
+                        # Check if we should continue or if there's an issue
+                        if not self.is_streaming:
+                            break
+                        consecutive_empty_count = 0  # Reset to continue checking
                     continue
                 except Exception as e:
                     print(f"Audio processing error: {e}")
@@ -171,7 +196,7 @@ class STTService:
                     self.last_error = str(e)
                     break
         
-        # Configure streaming recognition
+        # Configure streaming recognition with improved settings
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=self.sample_rate,
@@ -179,6 +204,8 @@ class STTService:
             enable_automatic_punctuation=True,
             model="latest_long",  # Use latest model for better accuracy
             use_enhanced=True,    # Enhanced model for better performance
+            enable_word_time_offsets=True,  # Enable word-level timing
+            enable_word_confidence=True,    # Enable word-level confidence
         )
         
         streaming_config = speech.StreamingRecognitionConfig(
@@ -188,66 +215,95 @@ class STTService:
         )
         
         try:
-            # Start streaming recognition
-            audio_requests = (
-                speech.StreamingRecognizeRequest(audio_content=chunk)
-                for chunk in audio_generator()
-            )
+            # Start streaming recognition with retry mechanism
+            max_retries = 3
+            retry_count = 0
             
-            responses = self.speech_client.streaming_recognize(
-                streaming_config, audio_requests
-            )
-            
-            # Process responses
-            for response in responses:
-                if not response.results:
-                    continue
-                
-                result = response.results[0]
-                if not result.alternatives:
-                    continue
-                
-                transcript = result.alternatives[0].transcript
-                confidence = result.alternatives[0].confidence
-                
-                # Clean transcript for comparison
-                clean_transcript = transcript.strip()
-                
-                # Output results based on finality
-                if result.is_final:
-                    # Skip if this is the same final result we just processed
-                    if clean_transcript == self.last_final_transcript or not clean_transcript:
-                        continue
+            while retry_count < max_retries and self.is_streaming:
+                try:
+                    # Start streaming recognition
+                    audio_requests = (
+                        speech.StreamingRecognizeRequest(audio_content=chunk)
+                        for chunk in audio_generator()
+                    )
                     
-                    try:
-                        self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
-                        self.last_final_transcript = clean_transcript
-                        self.total_transcripts += 1
-                        self.total_confidence += confidence if confidence else 0
-                    except queue.Full:
-                        # Clear old results if queue is full to prevent memory buildup
-                        try:
-                            self.result_queue.get_nowait()
-                            self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
-                            self.last_final_transcript = clean_transcript
-                            self.total_transcripts += 1
-                            self.total_confidence += confidence if confidence else 0
-                        except queue.Empty:
-                            pass
-                else:
-                    # Skip if this is the same interim result we just processed
-                    if clean_transcript == self.last_interim_transcript or not clean_transcript:
-                        continue
+                    responses = self.speech_client.streaming_recognize(
+                        streaming_config, audio_requests
+                    )
                     
-                    try:
-                        self.result_queue.put_nowait(("INTERIM", clean_transcript, confidence))
-                        self.last_interim_transcript = clean_transcript
-                    except queue.Full:
-                        # For interim results, just skip if queue is full
-                        pass
+                    # Process responses with improved error handling
+                    for response in responses:
+                        if not self.is_streaming:
+                            break
+                            
+                        if not response.results:
+                            continue
+                        
+                        result = response.results[0]
+                        if not result.alternatives:
+                            continue
+                        
+                        transcript = result.alternatives[0].transcript
+                        confidence = result.alternatives[0].confidence
+                        
+                        # Clean transcript for comparison
+                        clean_transcript = transcript.strip()
+                        
+                        # Output results based on finality
+                        if result.is_final:
+                            # Skip if this is the same final result we just processed
+                            if clean_transcript == self.last_final_transcript or not clean_transcript:
+                                continue
+                            
+                            try:
+                                self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
+                                self.last_final_transcript = clean_transcript
+                                self.total_transcripts += 1
+                                self.total_confidence += confidence if confidence else 0
+                                print(f"📝 Final result queued: '{clean_transcript}'")
+                            except queue.Full:
+                                # Clear old results if queue is full to prevent memory buildup
+                                try:
+                                    self.result_queue.get_nowait()
+                                    self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
+                                    self.last_final_transcript = clean_transcript
+                                    self.total_transcripts += 1
+                                    self.total_confidence += confidence if confidence else 0
+                                    print(f"📝 Final result queued (after clearing old): '{clean_transcript}'")
+                                except queue.Empty:
+                                    pass
+                        else:
+                            # Skip if this is the same interim result we just processed
+                            if clean_transcript == self.last_interim_transcript or not clean_transcript:
+                                continue
+                            
+                            try:
+                                self.result_queue.put_nowait(("INTERIM", clean_transcript, confidence))
+                                self.last_interim_transcript = clean_transcript
+                                print(f"📝 Interim result queued: '{clean_transcript}'")
+                            except queue.Full:
+                                # For interim results, just skip if queue is full
+                                print(f"⚠️ Result queue full, skipping interim result: '{clean_transcript}'")
+                                pass
+                    
+                    # If we get here, the streaming completed successfully
+                    break
+                    
+                except Exception as e:
+                    retry_count += 1
+                    print(f"Streaming recognition error (attempt {retry_count}/{max_retries}): {e}")
+                    self.error_count += 1
+                    self.last_error = str(e)
+                    
+                    if retry_count < max_retries:
+                        print(f"Retrying streaming recognition in 1 second...")
+                        time.sleep(1)
+                    else:
+                        print(f"Max retries reached, giving up on streaming recognition")
+                        break
                     
         except Exception as e:
-            print(f"Streaming recognition error: {e}")
+            print(f"Streaming recognition setup error: {e}")
             self.error_count += 1
             self.last_error = str(e)
     
@@ -353,6 +409,20 @@ class STTService:
                         
                 except queue.Empty:
                     loop_count += 1
+                    current_time = time.time()
+                    
+                    # Send heartbeat if no results for a while
+                    if current_time - self.last_heartbeat > self.heartbeat_interval:
+                        print(f"💓 Sending heartbeat to keep connection alive")
+                        yield {
+                            "type": "heartbeat",
+                            "message": "Streaming active",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "processed_chunks": self.processed_chunks,
+                            "queue_size": self.audio_queue.qsize()
+                        }
+                        self.last_heartbeat = current_time
+                    
                     if loop_count % 100 == 0:  # Print every 100 loops (10 seconds)
                         print(f"⏳ Waiting for audio results... (loop {loop_count})")
                     await asyncio.sleep(0.01)  # Small delay to prevent busy waiting
@@ -456,6 +526,32 @@ class STTService:
         # self.audio.terminate()
         
         print("✅ Speech-to-text streaming stopped")
+    
+    def restart_streaming(self):
+        """Restart streaming if it gets stuck or stops working."""
+        print("🔄 Restarting streaming...")
+        self.stop_streaming()
+        
+        # Clear queues to prevent stale data
+        while not self.audio_queue.empty():
+            try:
+                self.audio_queue.get_nowait()
+            except queue.Empty:
+                break
+                
+        while not self.result_queue.empty():
+            try:
+                self.result_queue.get_nowait()
+            except queue.Empty:
+                break
+        
+        # Reset tracking variables
+        self.last_final_transcript = ""
+        self.last_interim_transcript = ""
+        self.last_result_time = 0
+        self.last_heartbeat = time.time()
+        
+        print("✅ Streaming restarted")
     
     async def transcribe_audio_file(self, audio_data: bytes, language_code: str = None) -> Dict[str, Any]:
         """Transcribe audio from file data."""

@@ -477,6 +477,25 @@ async def stop_speech_to_text():
             detail=f"Failed to stop speech-to-text: {str(e)}"
         )
 
+@app.post("/stt/restart")
+async def restart_speech_to_text():
+    """Restart the speech-to-text streaming if it gets stuck"""
+    try:
+        stt_service = get_stt_service()
+        stt_service.restart_streaming()
+        
+        return {
+            "status": "success",
+            "message": "Speech-to-text streaming restarted",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to restart speech-to-text: {str(e)}"
+        )
+
 @app.get("/stt/status", response_model=Dict[str, Any])
 async def get_stt_status():
     """Get STT service status and statistics"""

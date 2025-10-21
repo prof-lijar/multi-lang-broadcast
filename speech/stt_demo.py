@@ -82,11 +82,9 @@ class SpeechToTextStreamer:
         self.last_result_time = 0
         self.debounce_interval = 0.1  # 100ms debounce interval
         
-        # Text deduplication
-        self.last_final_text = ""
-        self.last_interim_text = ""
-        self.duplicate_count = 0
-        self.max_duplicates = 3  # Maximum consecutive duplicates before stopping
+        # Track last results to prevent duplicates
+        self.last_final_transcript = ""
+        self.last_interim_transcript = ""
         
     def _init_speech_client(self, credentials_path: Optional[str]):
         """Initialize Google Speech-to-Text client with credentials."""
@@ -200,20 +198,34 @@ class SpeechToTextStreamer:
                 transcript = result.alternatives[0].transcript
                 confidence = result.alternatives[0].confidence
                 
+                # Clean transcript for comparison
+                clean_transcript = transcript.strip()
+                
                 # Output results based on finality
                 if result.is_final:
+                    # Skip if this is the same final result we just processed
+                    if clean_transcript == self.last_final_transcript or not clean_transcript:
+                        continue
+                    
                     try:
-                        self.result_queue.put_nowait(("FINAL", transcript, confidence))
+                        self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
+                        self.last_final_transcript = clean_transcript
                     except queue.Full:
                         # Clear old results if queue is full to prevent memory buildup
                         try:
                             self.result_queue.get_nowait()
-                            self.result_queue.put_nowait(("FINAL", transcript, confidence))
+                            self.result_queue.put_nowait(("FINAL", clean_transcript, confidence))
+                            self.last_final_transcript = clean_transcript
                         except queue.Empty:
                             pass
                 else:
+                    # Skip if this is the same interim result we just processed
+                    if clean_transcript == self.last_interim_transcript or not clean_transcript:
+                        continue
+                    
                     try:
-                        self.result_queue.put_nowait(("INTERIM", transcript, confidence))
+                        self.result_queue.put_nowait(("INTERIM", clean_transcript, confidence))
+                        self.last_interim_transcript = clean_transcript
                     except queue.Full:
                         # For interim results, just skip if queue is full
                         pass
@@ -226,10 +238,15 @@ class SpeechToTextStreamer:
         last_interim = ""
         last_final = ""
         interim_count = 0
+        last_interim_content = ""
+        last_final_content = ""
         
         while self.is_streaming:
             try:
                 result_type, transcript, confidence = self.result_queue.get(timeout=0.1)
+                
+                # Clean transcript for comparison (remove extra whitespace)
+                clean_transcript = transcript.strip()
                 
                 # Apply debouncing to prevent rapid-fire updates
                 current_time = time.time()
@@ -238,24 +255,26 @@ class SpeechToTextStreamer:
                 
                 if result_type == "FINAL":
                     # Skip if this is the same final result we just displayed
-                    if transcript == last_final:
+                    if clean_transcript == last_final_content or not clean_transcript:
                         continue
                     
                     # Clear interim text and show final result
                     if last_interim:
                         print("\r" + " " * len(last_interim) + "\r", end="", flush=True)
                         last_interim = ""
+                        last_interim_content = ""
                     
                     # Display final result with confidence
                     confidence_pct = confidence * 100 if confidence else 0
-                    print(f"🎯 {transcript} ({confidence_pct:.1f}%)")
-                    last_final = transcript
+                    print(f"🎯 {clean_transcript} ({confidence_pct:.1f}%)")
+                    last_final = f"🎯 {clean_transcript} ({confidence_pct:.1f}%)"
+                    last_final_content = clean_transcript
                     interim_count = 0
                     self.last_result_time = current_time
                     
                 elif result_type == "INTERIM":
-                    # Skip if this is the same interim result
-                    if transcript == last_interim.replace("⏳ ", ""):
+                    # Skip if this is the same interim result or empty
+                    if clean_transcript == last_interim_content or not clean_transcript:
                         continue
                     
                     # Only show interim results every few iterations to reduce noise
@@ -265,8 +284,9 @@ class SpeechToTextStreamer:
                         if last_interim:
                             print("\r" + " " * len(last_interim) + "\r", end="", flush=True)
                         
-                        print(f"⏳ {transcript}", end="", flush=True)
-                        last_interim = f"⏳ {transcript}"
+                        print(f"⏳ {clean_transcript}", end="", flush=True)
+                        last_interim = f"⏳ {clean_transcript}"
+                        last_interim_content = clean_transcript
                         self.last_result_time = current_time
                     
             except queue.Empty:
@@ -311,6 +331,11 @@ class SpeechToTextStreamer:
         self.is_streaming = True
         self.start_time = time.time()
         self.processed_chunks = 0
+        
+        # Reset tracking variables
+        self.last_final_transcript = ""
+        self.last_interim_transcript = ""
+        self.last_result_time = 0
         
         # Start audio stream
         self.stream.start_stream()
