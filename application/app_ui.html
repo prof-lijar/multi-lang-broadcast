@@ -428,6 +428,14 @@
         let currentTranslateLanguage = 'en';
         let streamReader = null;
         let abortController = null;
+        
+        // Language code mapping from STT to Translation API
+        const languageMapping = {
+            'en-US': 'en',
+            'ko-KR': 'ko', 
+            'zh-CN': 'zh',
+            'ja-JP': 'ja'
+        };
         let translationEnabled = false;
         let lastTranslatedText = '';
         
@@ -592,6 +600,7 @@
                     },
                     body: JSON.stringify({
                         text: text,
+                        source_language: languageMapping[currentLanguage],
                         target_language: currentTranslateLanguage
                     })
                 });

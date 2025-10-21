@@ -142,10 +142,22 @@ class TranslationService:
         
         try:
             # Use defaults if not provided
-            source_lang = source_language or self.settings.default_source_language
             target_lang = target_language or self.settings.default_target_language
             translation_model = model or self.settings.translation_model
             mime = mime_type or self.settings.translation_mime_type
+            
+            # Auto-detect source language if not provided
+            if source_language:
+                source_lang = source_language
+            else:
+                # Detect the source language automatically
+                detection_result = self.detect_language(text)
+                if detection_result.get("language_code"):
+                    source_lang = detection_result["language_code"]
+                    logger.info(f"🔍 Auto-detected source language: {source_lang}")
+                else:
+                    source_lang = self.settings.default_source_language
+                    logger.warning(f"⚠️ Language detection failed, using default: {source_lang}")
             
             # Prepare the request
             parent = f"projects/{self.settings.google_cloud_project_id}/locations/{self.settings.google_cloud_location}"
@@ -182,13 +194,20 @@ class TranslationService:
             else:
                 self.stats["average_latency_ms"] = (self.stats["average_latency_ms"] + latency_ms) / 2
             
+            # Get detected language from response or use our detected language
+            detected_lang = None
+            if hasattr(response.translations[0], 'detected_language_code') and response.translations[0].detected_language_code:
+                detected_lang = response.translations[0].detected_language_code
+            elif not source_language:  # If we auto-detected, use that
+                detected_lang = source_lang
+            
             # Prepare result
             result = {
                 "original_text": text,
                 "translated_text": response.translations[0].translated_text,
                 "source_language": source_lang,
                 "target_language": target_lang,
-                "detected_language": response.translations[0].detected_language_code if hasattr(response.translations[0], 'detected_language_code') else source_lang,
+                "detected_language": detected_lang,
                 "model": translation_model,
                 "mime_type": mime,
                 "latency_ms": round(latency_ms, 2),
