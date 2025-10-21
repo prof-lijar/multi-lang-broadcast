@@ -14,6 +14,9 @@ import asyncio
 import json
 import base64
 import logging
+import subprocess
+import threading
+import time
 from typing import Dict, Any, List, Optional
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -21,6 +24,7 @@ from service.output_audio import get_audio_service, initialize_audio_service
 from service.translate import get_translation_service, initialize_translation_service
 from service.stt import get_stt_service, initialize_stt_service
 from service.tts import get_tts_service, initialize_tts_service
+from service.tts_queue import get_tts_queue, initialize_tts_queue
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -67,6 +71,12 @@ class DualAudioRequest(BaseModel):
 class PlayDualAudioRequest(BaseModel):
     speaker1: Dict[str, Any]
     speaker2: Dict[str, Any]
+
+class TTSQueueRequest(BaseModel):
+    text: str
+    language_code: str = "en-US"
+    speaker1_config: Dict[str, Any]
+    speaker2_config: Dict[str, Any]
 
 class TTSRequest(BaseModel):
     text: str
@@ -131,6 +141,12 @@ async def startup_event():
             print("✅ TTS service initialized successfully")
         else:
             print("⚠️ TTS service initialization failed")
+        
+        # Initialize TTS queue
+        if initialize_tts_queue():
+            print("✅ TTS queue initialized successfully")
+        else:
+            print("⚠️ TTS queue initialization failed")
             
     except Exception as e:
         print(f"❌ Error initializing services: {e}")
@@ -745,6 +761,214 @@ async def reset_tts_statistics():
             detail=f"Failed to reset TTS statistics: {str(e)}"
         )
 
+@app.post("/tts/dual-speakers", response_model=Dict[str, Any])
+async def text_to_speech_dual_speakers(request: TTSRequest):
+    """Convert text to speech and play on both assigned DAC speakers (cards 3 and 4)"""
+    try:
+        tts_service = get_tts_service()
+        audio_service = get_audio_service()
+        
+        if not tts_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="TTS service not initialized"
+            )
+        
+        # Check if speakers are assigned
+        if not audio_service.speaker1_assignment or not audio_service.speaker2_assignment:
+            raise HTTPException(
+                status_code=400,
+                detail="Both speakers must be assigned before testing dual TTS"
+            )
+        
+        # Validate that assigned devices are DAC devices (cards 3 and 4)
+        speaker1_device_id = audio_service.speaker1_assignment.device_id
+        speaker2_device_id = audio_service.speaker2_assignment.device_id
+        
+        # Check if devices are DAC devices (cards 3 and 4)
+        dac_devices = audio_service.get_dac_devices()
+        dac_card_ids = [device.card_id for device in dac_devices]
+        
+        if speaker1_device_id not in dac_card_ids or speaker2_device_id not in dac_card_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only DAC devices (cards {dac_card_ids}) can be used for dual speaker TTS. "
+                       f"Current assignments: Speaker1=card {speaker1_device_id}, Speaker2=card {speaker2_device_id}"
+            )
+        
+        # Ensure we're using the correct DAC devices (cards 3 and 4)
+        if not (speaker1_device_id in [3, 4] and speaker2_device_id in [3, 4]):
+            raise HTTPException(
+                status_code=400,
+                detail="Dual speaker TTS requires DAC devices (cards 3 and 4). "
+                       f"Current assignments: Speaker1=card {speaker1_device_id}, Speaker2=card {speaker2_device_id}"
+            )
+        
+        # Set language and voice gender if different from default
+        if request.language_code != tts_service.language_code:
+            tts_service.set_language(request.language_code)
+        if request.voice_gender != str(tts_service.voice_gender):
+            tts_service.set_voice_gender(request.voice_gender)
+        
+        # Generate audio file
+        audio_file = tts_service.text_to_speech(request.text)
+        
+        # Convert MP3 to WAV for aplay compatibility
+        wav_file = audio_file.replace('.mp3', '.wav')
+        try:
+            # Use ffmpeg to convert MP3 to WAV
+            subprocess.run([
+                'ffmpeg', '-i', audio_file, '-acodec', 'pcm_s16le', 
+                '-ar', '44100', '-ac', '2', '-y', wav_file
+            ], check=True, capture_output=True)
+            
+            # Start dual playback
+            audio_service._start_dual_playback(wav_file, wav_file)
+            
+            # Clean up files if requested
+            if request.cleanup:
+                try:
+                    os.remove(audio_file)
+                    os.remove(wav_file)
+                except OSError as e:
+                    logger.warning(f"Could not clean up temporary files: {e}")
+            
+            return {
+                "status": "success",
+                "message": "Text converted to speech and playing on both speakers",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "text": request.text,
+                    "language_code": request.language_code,
+                    "voice_gender": request.voice_gender,
+                    "speaker1": {
+                        "language": audio_service.speaker1_assignment.language,
+                        "device": audio_service.speaker1_assignment.device_name
+                    },
+                    "speaker2": {
+                        "language": audio_service.speaker2_assignment.language,
+                        "device": audio_service.speaker2_assignment.device_name
+                    },
+                    "audio_file": wav_file
+                }
+            }
+            
+        except subprocess.CalledProcessError as e:
+            # If ffmpeg fails, try to play the MP3 directly (may not work with aplay)
+            logger.warning(f"ffmpeg conversion failed: {e}, trying direct playback")
+            audio_service._start_dual_playback(audio_file, audio_file)
+            
+            if request.cleanup:
+                try:
+                    os.remove(audio_file)
+                except OSError as e:
+                    logger.warning(f"Could not clean up temporary file: {e}")
+            
+            return {
+                "status": "success",
+                "message": "Text converted to speech and playing on both speakers (MP3 format)",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "text": request.text,
+                    "language_code": request.language_code,
+                    "voice_gender": request.voice_gender,
+                    "speaker1": {
+                        "language": audio_service.speaker1_assignment.language,
+                        "device": audio_service.speaker1_assignment.device_name
+                    },
+                    "speaker2": {
+                        "language": audio_service.speaker2_assignment.language,
+                        "device": audio_service.speaker2_assignment.device_name
+                    },
+                    "audio_file": audio_file
+                }
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dual speaker TTS failed: {str(e)}"
+        )
+
+@app.post("/tts/setup-dac-speakers", response_model=Dict[str, Any])
+async def setup_dac_speakers():
+    """Automatically set up DAC devices (cards 3 and 4) for dual speaker TTS"""
+    try:
+        audio_service = get_audio_service()
+        
+        # Get available DAC devices
+        dac_devices = audio_service.get_dac_devices()
+        
+        if len(dac_devices) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Need at least 2 DAC devices for dual speaker setup. Found: {len(dac_devices)}"
+            )
+        
+        # Sort DAC devices by card_id to ensure consistent assignment
+        dac_devices.sort(key=lambda x: x.card_id)
+        
+        # Assign first two DAC devices (should be cards 3 and 4)
+        speaker1_device = dac_devices[0]  # Card 3
+        speaker2_device = dac_devices[1]  # Card 4
+        
+        # Set up speaker assignments
+        success = audio_service.set_speaker_assignments(
+            speaker1={
+                'language': 'en',
+                'device': speaker1_device.card_id,
+                'device_name': speaker1_device.name
+            },
+            speaker2={
+                'language': 'ko',  # Default to Korean for second speaker
+                'device': speaker2_device.card_id,
+                'device_name': speaker2_device.name
+            }
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "DAC speakers set up successfully for dual TTS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "speaker1": {
+                        "language": "en",
+                        "device": speaker1_device.card_id,
+                        "device_name": speaker1_device.name,
+                        "description": speaker1_device.description
+                    },
+                    "speaker2": {
+                        "language": "ko",
+                        "device": speaker2_device.card_id,
+                        "device_name": speaker2_device.name,
+                        "description": speaker2_device.description
+                    },
+                    "available_dac_devices": [
+                        {
+                            "card_id": device.card_id,
+                            "name": device.name,
+                            "description": device.description
+                        } for device in dac_devices
+                    ]
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to set up DAC speaker assignments"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to setup DAC speakers: {str(e)}"
+        )
+
 @app.get("/tts/languages", response_model=Dict[str, Any])
 async def get_supported_tts_languages():
     """Get list of supported languages for text-to-speech"""
@@ -1022,41 +1246,89 @@ async def get_audio_output_status():
 
 @app.post("/audio-output/play-dual", response_model=Dict[str, Any])
 async def play_dual_audio(request: PlayDualAudioRequest):
-    """Play dual audio with specific text and language assignments"""
+    """Queue dual audio for sequential playback (prevents overlapping speech)"""
     try:
         audio_service = get_audio_service()
+        tts_queue = get_tts_queue()
         
         # Set speaker assignments
-        audio_service.set_speaker_assignments(
+        assignment_success = audio_service.set_speaker_assignments(
             speaker1=request.speaker1,
             speaker2=request.speaker2
         )
         
-        # Note: TTS functionality has been removed
-        # This endpoint is no longer functional
-        raise HTTPException(
-            status_code=501,
-            detail="TTS functionality has been removed. Use test-simple endpoint instead."
+        if not assignment_success:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to set speaker assignments"
+            )
+        
+        # Check if both speakers have text to speak
+        speaker1_text = request.speaker1.get('text', '').strip()
+        speaker2_text = request.speaker2.get('text', '').strip()
+        
+        if not speaker1_text and not speaker2_text:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one speaker must have text to speak"
+            )
+        
+        # Determine which text to use for TTS
+        # If both speakers have text, use the translated text (speaker2)
+        # If only one has text, use that one
+        if speaker1_text and speaker2_text:
+            tts_text = speaker2_text  # Usually the translated text
+            tts_language = request.speaker2.get('language', 'en-US')
+        elif speaker1_text:
+            tts_text = speaker1_text
+            tts_language = request.speaker1.get('language', 'en-US')
+        else:
+            tts_text = speaker2_text
+            tts_language = request.speaker2.get('language', 'en-US')
+        
+        # Add to TTS queue for sequential processing
+        request_id = tts_queue.add_request(
+            text=tts_text,
+            language_code=tts_language,
+            speaker1_config=request.speaker1,
+            speaker2_config=request.speaker2
         )
         
-        if success:
+        if request_id:
             return {
                 "status": "success",
-                "message": "Dual audio playback started",
-                "timestamp": datetime.utcnow().isoformat()
+                "message": "Audio queued for sequential playback",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "request_id": request_id,
+                    "text": tts_text,
+                    "language": tts_language,
+                    "speaker1": {
+                        "text": speaker1_text,
+                        "language": request.speaker1.get('language', 'en-US'),
+                        "device": request.speaker1.get('device', 'unknown')
+                    },
+                    "speaker2": {
+                        "text": speaker2_text,
+                        "language": request.speaker2.get('language', 'en-US'),
+                        "device": request.speaker2.get('device', 'unknown')
+                    },
+                    "queue_position": tts_queue.get_statistics()['queue_size']
+                }
             }
         else:
             raise HTTPException(
                 status_code=400,
-                detail="Failed to start dual audio playback"
+                detail="Failed to queue audio (queue may be full)"
             )
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to queue dual audio: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to play dual audio: {str(e)}"
+            detail=f"Failed to queue dual audio: {str(e)}"
         )
 
 @app.post("/audio-output/test-simple", response_model=Dict[str, Any])
@@ -1085,6 +1357,84 @@ async def test_simple_dual_audio():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to test simple dual audio: {str(e)}"
+        )
+
+# TTS Queue Management endpoints
+@app.post("/tts/queue", response_model=Dict[str, Any])
+async def queue_tts(request: TTSQueueRequest):
+    """Add a TTS request to the sequential queue"""
+    try:
+        tts_queue = get_tts_queue()
+        
+        request_id = tts_queue.add_request(
+            text=request.text,
+            language_code=request.language_code,
+            speaker1_config=request.speaker1_config,
+            speaker2_config=request.speaker2_config
+        )
+        
+        if request_id:
+            return {
+                "status": "success",
+                "message": "TTS request queued for sequential playback",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {
+                    "request_id": request_id,
+                    "text": request.text,
+                    "language_code": request.language_code,
+                    "queue_position": tts_queue.get_statistics()['queue_size']
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to queue TTS request (queue may be full)"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue TTS: {str(e)}"
+        )
+
+@app.get("/tts/queue/status", response_model=Dict[str, Any])
+async def get_tts_queue_status():
+    """Get TTS queue status and statistics"""
+    try:
+        tts_queue = get_tts_queue()
+        stats = tts_queue.get_statistics()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get TTS queue status: {str(e)}"
+        )
+
+@app.post("/tts/queue/clear", response_model=Dict[str, Any])
+async def clear_tts_queue():
+    """Clear all TTS requests from the queue"""
+    try:
+        tts_queue = get_tts_queue()
+        tts_queue.clear_queue()
+        
+        return {
+            "status": "success",
+            "message": "TTS queue cleared",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to clear TTS queue: {str(e)}"
         )
 
 

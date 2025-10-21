@@ -482,6 +482,7 @@
                 <button class="btn btn-secondary" onclick="clearTranslation()">Clear</button>
                 <button class="btn btn-success" onclick="toggleTranslation()" id="translateToggle">Enable Translation</button>
                 <button class="btn btn-secondary" onclick="testTranslation()">Test Translation</button>
+                <button class="btn btn-info" onclick="checkTTSQueueStatus()">TTS Queue Status</button>
             </div>
             
             <div class="status idle" id="translateStatus">
@@ -533,6 +534,7 @@
             
             <div class="audio-controls">
                 <button class="btn btn-secondary" onclick="refreshAudioDevices()">Refresh Devices</button>
+                <button class="btn btn-success" onclick="setupDACSpeakers()">Setup DAC Speakers</button>
                 <button class="btn btn-success" onclick="testAudioOutput()">Test Audio</button>
                 <button class="btn btn-secondary" onclick="testSimpleAudio()">Test Simple</button>
                 <button class="btn btn-danger" onclick="stopAudioOutput()">Stop Audio</button>
@@ -560,6 +562,7 @@
                 </div>
                 <div style="display: flex; gap: 8px; justify-content: center;">
                     <button class="btn btn-success" onclick="testTTS()">Test TTS</button>
+                    <button class="btn btn-success" onclick="testTTSDualSpeakers()">Test Dual Speakers</button>
                     <button class="btn btn-secondary" onclick="testTTSFile()">Generate File</button>
                     <button class="btn btn-secondary" onclick="getTTSStatus()">TTS Status</button>
                 </div>
@@ -736,6 +739,30 @@
             }
         }
         
+        async function checkTTSQueueStatus() {
+            try {
+                const response = await fetch('/tts/queue/status');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    const stats = result.data;
+                    console.log('TTS Queue Status:', stats);
+                    
+                    // Update status display
+                    const statusText = `TTS Queue: ${stats.queue_size} pending, ${stats.completed_requests} completed, ${stats.failed_requests} failed${stats.currently_playing ? ' (PLAYING)' : ''}`;
+                    updateAudioStatus(statusText, stats.currently_playing ? 'recording' : 'idle');
+                    
+                    return stats;
+                } else {
+                    console.error('Failed to get TTS queue status:', result);
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error checking TTS queue status:', error);
+                return null;
+            }
+        }
+        
         async function translateText(text) {
             console.log('translateText called with:', text);
             console.log('translationEnabled:', translationEnabled);
@@ -901,6 +928,45 @@
             } catch (error) {
                 console.error('Error loading audio devices:', error);
                 updateAudioStatus('Error loading devices: ' + error.message, 'error');
+            }
+        }
+        
+        async function setupDACSpeakers() {
+            try {
+                updateAudioStatus('Setting up DAC speakers (cards 3 and 4)...', 'recording');
+                
+                const response = await fetch('/tts/setup-dac-speakers', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    // Update the speaker assignments in the UI
+                    const speaker1Select = document.getElementById('speaker1Device');
+                    const speaker2Select = document.getElementById('speaker2Device');
+                    const speaker1LangSelect = document.getElementById('speaker1Language');
+                    const speaker2LangSelect = document.getElementById('speaker2Language');
+                    
+                    // Set the device selections
+                    speaker1Select.value = result.data.speaker1.device;
+                    speaker2Select.value = result.data.speaker2.device;
+                    
+                    // Set the language selections
+                    speaker1LangSelect.value = result.data.speaker1.language;
+                    speaker2LangSelect.value = result.data.speaker2.language;
+                    
+                    // Update speaker assignments
+                    updateSpeakerAssignments();
+                    
+                    const statusText = `DAC Speakers Setup: Speaker1(${result.data.speaker1.device_name} - ${result.data.speaker1.language}), Speaker2(${result.data.speaker2.device_name} - ${result.data.speaker2.language})`;
+                    updateAudioStatus(statusText, 'idle');
+                    console.log('DAC speakers setup result:', result);
+                } else {
+                    throw new Error(result.message || 'Failed to setup DAC speakers');
+                }
+            } catch (error) {
+                console.error('DAC speakers setup error:', error);
+                updateAudioStatus('DAC speakers setup failed: ' + error.message, 'error');
             }
         }
         
@@ -1182,6 +1248,46 @@
             }
         }
         
+        async function testTTSDualSpeakers() {
+            try {
+                const text = document.getElementById('ttsTestText').value;
+                const language = document.getElementById('ttsLanguage').value;
+                const voiceGender = document.getElementById('ttsVoiceGender').value;
+                
+                if (!text.trim()) {
+                    updateAudioStatus('Please enter text to speak', 'error');
+                    return;
+                }
+                
+                updateAudioStatus('Converting text to speech for dual speakers...', 'recording');
+                
+                const response = await fetch('/tts/dual-speakers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        language_code: language,
+                        voice_gender: voiceGender,
+                        play_audio: true,
+                        cleanup: true
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    const speaker1Info = result.data.speaker1 ? `Card ${result.data.speaker1.device} (${result.data.speaker1.language})` : 'Not assigned';
+                    const speaker2Info = result.data.speaker2 ? `Card ${result.data.speaker2.device} (${result.data.speaker2.language})` : 'Not assigned';
+                    updateAudioStatus(`🎵 Dual TTS playing on DAC speakers: Speaker1(${speaker1Info}), Speaker2(${speaker2Info})`, 'idle');
+                    console.log('Dual TTS result:', result);
+                } else {
+                    throw new Error(result.message || 'Dual speaker TTS test failed');
+                }
+            } catch (error) {
+                console.error('Dual speaker TTS test error:', error);
+                updateAudioStatus('Dual speaker TTS test failed: ' + error.message, 'error');
+            }
+        }
+        
         async function getTTSStatus() {
             try {
                 updateAudioStatus('Getting TTS status...', 'recording');
@@ -1220,6 +1326,9 @@
                 e.returnValue = 'Recording is in progress. Are you sure you want to leave?';
             }
         });
+        
+        // Start periodic TTS queue status updates every 3 seconds
+        setInterval(checkTTSQueueStatus, 3000);
     </script>
 </body>
 </html>
