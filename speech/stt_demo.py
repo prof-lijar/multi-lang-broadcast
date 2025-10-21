@@ -35,7 +35,10 @@ class SpeechToTextStreamer:
                  sample_rate: int = 16000,
                  chunk_size: int = 1024,
                  language_code: str = "en-US",
-                 credentials_path: Optional[str] = None):
+                 credentials_path: Optional[str] = None,
+                 enable_monitoring: bool = True,
+                 monitor_cpu: bool = True,
+                 monitor_memory: bool = True):
         """
         Initialize the speech-to-text streamer.
         
@@ -44,10 +47,16 @@ class SpeechToTextStreamer:
             chunk_size: Audio chunk size for streaming
             language_code: Language for speech recognition
             credentials_path: Path to Google Cloud credentials JSON
+            enable_monitoring: Whether to start the performance monitor thread
+            monitor_cpu: Whether to include CPU usage in performance output
+            monitor_memory: Whether to include memory usage in performance output
         """
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.language_code = language_code
+        self.enable_monitoring = enable_monitoring
+        self.monitor_cpu = monitor_cpu
+        self.monitor_memory = monitor_memory
         
         # Audio configuration
         self.audio_format = pyaudio.paInt16
@@ -63,11 +72,21 @@ class SpeechToTextStreamer:
         
         # Threading for performance
         self.audio_queue = queue.Queue(maxsize=10)
-        self.result_queue = queue.Queue()
+        self.result_queue = queue.Queue(maxsize=50)  # Limit queue size to prevent memory buildup
         
         # Performance metrics
         self.start_time = None
         self.processed_chunks = 0
+        
+        # Debouncing for results
+        self.last_result_time = 0
+        self.debounce_interval = 0.1  # 100ms debounce interval
+        
+        # Text deduplication
+        self.last_final_text = ""
+        self.last_interim_text = ""
+        self.duplicate_count = 0
+        self.max_duplicates = 3  # Maximum consecutive duplicates before stopping
         
     def _init_speech_client(self, credentials_path: Optional[str]):
         """Initialize Google Speech-to-Text client with credentials."""
@@ -183,9 +202,21 @@ class SpeechToTextStreamer:
                 
                 # Output results based on finality
                 if result.is_final:
-                    self.result_queue.put(("FINAL", transcript, confidence))
+                    try:
+                        self.result_queue.put_nowait(("FINAL", transcript, confidence))
+                    except queue.Full:
+                        # Clear old results if queue is full to prevent memory buildup
+                        try:
+                            self.result_queue.get_nowait()
+                            self.result_queue.put_nowait(("FINAL", transcript, confidence))
+                        except queue.Empty:
+                            pass
                 else:
-                    self.result_queue.put(("INTERIM", transcript, confidence))
+                    try:
+                        self.result_queue.put_nowait(("INTERIM", transcript, confidence))
+                    except queue.Full:
+                        # For interim results, just skip if queue is full
+                        pass
                     
         except Exception as e:
             print(f"Streaming recognition error: {e}")
@@ -193,12 +224,23 @@ class SpeechToTextStreamer:
     def _display_results(self):
         """Display results in terminal with performance metrics."""
         last_interim = ""
+        last_final = ""
+        interim_count = 0
         
         while self.is_streaming:
             try:
                 result_type, transcript, confidence = self.result_queue.get(timeout=0.1)
                 
+                # Apply debouncing to prevent rapid-fire updates
+                current_time = time.time()
+                if current_time - self.last_result_time < self.debounce_interval:
+                    continue
+                
                 if result_type == "FINAL":
+                    # Skip if this is the same final result we just displayed
+                    if transcript == last_final:
+                        continue
+                    
                     # Clear interim text and show final result
                     if last_interim:
                         print("\r" + " " * len(last_interim) + "\r", end="", flush=True)
@@ -207,14 +249,25 @@ class SpeechToTextStreamer:
                     # Display final result with confidence
                     confidence_pct = confidence * 100 if confidence else 0
                     print(f"🎯 {transcript} ({confidence_pct:.1f}%)")
+                    last_final = transcript
+                    interim_count = 0
+                    self.last_result_time = current_time
                     
                 elif result_type == "INTERIM":
-                    # Show interim result (overwrite previous interim)
-                    if last_interim:
-                        print("\r" + " " * len(last_interim) + "\r", end="", flush=True)
+                    # Skip if this is the same interim result
+                    if transcript == last_interim.replace("⏳ ", ""):
+                        continue
                     
-                    print(f"⏳ {transcript}", end="", flush=True)
-                    last_interim = f"⏳ {transcript}"
+                    # Only show interim results every few iterations to reduce noise
+                    interim_count += 1
+                    if interim_count % 3 == 0:  # Show every 3rd interim result
+                        # Clear previous interim text
+                        if last_interim:
+                            print("\r" + " " * len(last_interim) + "\r", end="", flush=True)
+                        
+                        print(f"⏳ {transcript}", end="", flush=True)
+                        last_interim = f"⏳ {transcript}"
+                        self.last_result_time = current_time
                     
             except queue.Empty:
                 continue
@@ -229,11 +282,14 @@ class SpeechToTextStreamer:
             if self.start_time:
                 elapsed = time.time() - self.start_time
                 chunks_per_sec = self.processed_chunks / elapsed if elapsed > 0 else 0
-                cpu_percent = psutil.cpu_percent()
-                memory_percent = psutil.virtual_memory().percent
-                
-                print(f"\n📊 Performance: {chunks_per_sec:.1f} chunks/sec | "
-                      f"CPU: {cpu_percent:.1f}% | Memory: {memory_percent:.1f}%")
+                metrics_parts = [f"{chunks_per_sec:.1f} chunks/sec"]
+                if self.monitor_cpu:
+                    cpu_percent = psutil.cpu_percent()
+                    metrics_parts.append(f"CPU: {cpu_percent:.1f}%")
+                if self.monitor_memory:
+                    memory_percent = psutil.virtual_memory().percent
+                    metrics_parts.append(f"Memory: {memory_percent:.1f}%")
+                print("\n📊 Performance: " + " | ".join(metrics_parts))
     
     def start_streaming(self):
         """Start real-time speech-to-text streaming."""
@@ -262,11 +318,12 @@ class SpeechToTextStreamer:
         # Start processing threads
         audio_thread = threading.Thread(target=self._process_audio_stream, daemon=True)
         display_thread = threading.Thread(target=self._display_results, daemon=True)
-        monitor_thread = threading.Thread(target=self._monitor_performance, daemon=True)
+        monitor_thread = threading.Thread(target=self._monitor_performance, daemon=True) if self.enable_monitoring else None
         
         audio_thread.start()
         display_thread.start()
-        monitor_thread.start()
+        if monitor_thread:
+            monitor_thread.start()
         
         try:
             # Keep main thread alive
@@ -305,7 +362,7 @@ def main():
     print("Available languages:")
     print("1. English (en-US)")
     print("2. Korean (ko-KR)")
-    print("3. Chinese (zh-CN)")
+    print("3. Chinese (cmn-Hans-CN)")
     print("4. Burmese (my-MM)")
     
     choice = input("\nSelect language (1-4) or press Enter for English: ").strip()
@@ -313,12 +370,45 @@ def main():
     language_map = {
         "1": "en-US",
         "2": "ko-KR", 
-        "3": "zh-CN",
+        "3": "cmn-Hans-CN",
         "4": "my-MM"
     }
     
     LANGUAGE = language_map.get(choice, "en-US")
     print(f"✓ Selected language: {LANGUAGE}")
+    
+    # Monitoring selection menu
+    print("\nMonitoring options:")
+    print("1. Stream only (no monitoring)")
+    print("2. Monitor CPU only")
+    print("3. Monitor Memory only")
+    print("4. Monitor CPU and Memory")
+    mon_choice = input("\nSelect monitoring option (1-4) or press Enter for both: ").strip()
+    if mon_choice == "1":
+        enable_monitoring = False
+        monitor_cpu = False
+        monitor_memory = False
+    elif mon_choice == "2":
+        enable_monitoring = True
+        monitor_cpu = True
+        monitor_memory = False
+    elif mon_choice == "3":
+        enable_monitoring = True
+        monitor_cpu = False
+        monitor_memory = True
+    else:
+        enable_monitoring = True
+        monitor_cpu = True
+        monitor_memory = True
+    if enable_monitoring:
+        enabled_parts = []
+        if monitor_cpu:
+            enabled_parts.append("CPU")
+        if monitor_memory:
+            enabled_parts.append("Memory")
+        print(f"✓ Monitoring enabled: {' & '.join(enabled_parts)}")
+    else:
+        print("✓ Monitoring disabled (stream only)")
     
     # Configuration
     SAMPLE_RATE = 16000  # Optimal for Google Speech-to-Text
@@ -355,7 +445,10 @@ def main():
             sample_rate=SAMPLE_RATE,
             chunk_size=CHUNK_SIZE,
             language_code=LANGUAGE,
-            credentials_path=credentials_path
+            credentials_path=credentials_path,
+            enable_monitoring=enable_monitoring,
+            monitor_cpu=monitor_cpu,
+            monitor_memory=monitor_memory
         )
         
         streamer.start_streaming()
