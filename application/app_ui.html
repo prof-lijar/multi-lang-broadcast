@@ -49,6 +49,85 @@
             font-size: 1.1rem;
         }
 
+        .settings-section {
+            margin-bottom: 40px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+        }
+
+        .model-selector {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .model-option {
+            cursor: pointer;
+            position: relative;
+        }
+
+        .model-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .model-card {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            min-width: 200px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .model-option input[type="radio"]:checked + .model-card {
+            border-color: #007bff;
+            background: #f8f9ff;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .model-option:hover .model-card {
+            border-color: #007bff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .model-icon {
+            font-size: 2rem;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .model-info {
+            flex: 1;
+        }
+
+        .model-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .model-description {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
         .recording-section {
             display: flex;
             flex-direction: column;
@@ -313,6 +392,20 @@
                 flex-direction: column;
                 align-items: center;
             }
+
+            .model-selector {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .model-card {
+                min-width: 100%;
+                width: 100%;
+            }
+
+            .settings-section {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -321,6 +414,32 @@
         <div class="header">
             <h1>🌍 Multi-Language Live Broadcast</h1>
             <p>Record audio and get real-time translations in multiple languages</p>
+        </div>
+
+        <div class="settings-section">
+            <h2 class="section-title">⚙️ Translation Settings</h2>
+            <div class="model-selector">
+                <label class="model-option">
+                    <input type="radio" name="translationModel" value="google" checked>
+                    <span class="model-card">
+                        <div class="model-icon">🌐</div>
+                        <div class="model-info">
+                            <div class="model-name">Google Translate</div>
+                            <div class="model-description">Cloud-based translation service</div>
+                        </div>
+                    </span>
+                </label>
+                <label class="model-option">
+                    <input type="radio" name="translationModel" value="sllm">
+                    <span class="model-card">
+                        <div class="model-icon">🤖</div>
+                        <div class="model-info">
+                            <div class="model-name">SLLM (Local)</div>
+                            <div class="model-description">Local Ollama model</div>
+                        </div>
+                    </span>
+                </label>
+            </div>
         </div>
 
         <div class="recording-section">
@@ -573,62 +692,28 @@
             }
         }
 
+        // Get selected translation model
+        function getSelectedModel() {
+            const selectedModel = document.querySelector('input[name="translationModel"]:checked');
+            return selectedModel ? selectedModel.value : 'google';
+        }
+
         // Translate text to multiple languages
         async function translateText(text) {
             try {
                 updateStatus('translationStatus', 'processing');
                 
-                const response = await fetch('/translate/multiple', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        text: text,
-                        source_language: 'en'
-                    })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('Translation result:', result);
-                    
-                    if (result.data && result.data.translations) {
-                        const translations = result.data.translations;
-                        
-                        // Update Korean translation
-                        if (translations.ko && translations.ko.translated_text) {
-                            document.getElementById('koreanText').textContent = translations.ko.translated_text;
-                            document.getElementById('koreanPlay').disabled = false;
-                        } else {
-                            document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.ko?.error || 'Unknown error');
-                        }
-                        
-                        // Update Chinese translation
-                        if (translations.zh && translations.zh.translated_text) {
-                            document.getElementById('chineseText').textContent = translations.zh.translated_text;
-                            document.getElementById('chinesePlay').disabled = false;
-                        } else {
-                            document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
-                        }
-                        
-                        // Update Japanese translation
-                        if (translations.ja && translations.ja.translated_text) {
-                            document.getElementById('japaneseText').textContent = translations.ja.translated_text;
-                            document.getElementById('japanesePlay').disabled = false;
-                        } else {
-                            document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
-                        }
-                        
-                        updateStatus('translationStatus', 'ready');
-                        updateStatus('ttsStatus', 'ready');
-                    } else {
-                        throw new Error('Invalid translation response');
-                    }
+                const selectedModel = getSelectedModel();
+                console.log('Using translation model:', selectedModel);
+                
+                if (selectedModel === 'sllm') {
+                    // Use SLLM for individual translations
+                    await translateWithSLLM(text);
                 } else {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Translation failed');
+                    // Use Google Translate for multiple languages
+                    await translateWithGoogle(text);
                 }
+                
             } catch (error) {
                 console.error('Error translating text:', error);
                 
@@ -639,6 +724,108 @@
                 
                 updateStatus('translationStatus', 'ready');
             }
+        }
+
+        // Translate with Google Translate (multiple languages at once)
+        async function translateWithGoogle(text) {
+            const response = await fetch('/translate/multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    source_language: 'en'
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Google Translation result:', result);
+                
+                if (result.data && result.data.translations) {
+                    const translations = result.data.translations;
+                    
+                    // Update Korean translation
+                    if (translations.ko && translations.ko.translated_text) {
+                        document.getElementById('koreanText').textContent = translations.ko.translated_text;
+                        document.getElementById('koreanPlay').disabled = false;
+                    } else {
+                        document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.ko?.error || 'Unknown error');
+                    }
+                    
+                    // Update Chinese translation
+                    if (translations.zh && translations.zh.translated_text) {
+                        document.getElementById('chineseText').textContent = translations.zh.translated_text;
+                        document.getElementById('chinesePlay').disabled = false;
+                    } else {
+                        document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
+                    }
+                    
+                    // Update Japanese translation
+                    if (translations.ja && translations.ja.translated_text) {
+                        document.getElementById('japaneseText').textContent = translations.ja.translated_text;
+                        document.getElementById('japanesePlay').disabled = false;
+                    } else {
+                        document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
+                    }
+                    
+                    updateStatus('translationStatus', 'ready');
+                    updateStatus('ttsStatus', 'ready');
+                } else {
+                    throw new Error('Invalid translation response');
+                }
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'Google Translation failed');
+            }
+        }
+
+        // Translate with SLLM (individual translations)
+        async function translateWithSLLM(text) {
+            const languages = [
+                { code: 'ko', name: 'Korean', element: 'koreanText', playButton: 'koreanPlay' },
+                { code: 'zh', name: 'Chinese', element: 'chineseText', playButton: 'chinesePlay' },
+                { code: 'ja', name: 'Japanese', element: 'japaneseText', playButton: 'japanesePlay' }
+            ];
+
+            // Translate to each language individually
+            for (const lang of languages) {
+                try {
+                    const response = await fetch('/sllm/translate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            source_language: 'en',
+                            target_language: lang.code
+                        })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log(`SLLM Translation result for ${lang.name}:`, result);
+                        
+                        if (result.data && result.data.success && result.data.translated_text) {
+                            document.getElementById(lang.element).textContent = result.data.translated_text;
+                            document.getElementById(lang.playButton).disabled = false;
+                        } else {
+                            document.getElementById(lang.element).textContent = 'Translation failed: ' + (result.data?.error || 'Unknown error');
+                        }
+                    } else {
+                        const error = await response.json();
+                        document.getElementById(lang.element).textContent = 'Translation failed: ' + (error.detail || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error(`Error translating to ${lang.name}:`, error);
+                    document.getElementById(lang.element).textContent = 'Translation failed: ' + error.message;
+                }
+            }
+            
+            updateStatus('translationStatus', 'ready');
+            updateStatus('ttsStatus', 'ready');
         }
 
         // Play audio function (placeholder for TTS integration)

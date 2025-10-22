@@ -15,6 +15,7 @@ from service.output_audio import get_audio_service, initialize_audio_service
 from service.audio import get_audio_recording_service, initialize_audio_recording_service
 from service.stt import get_stt_service, initialize_stt_service
 from service.translate import get_translation_service, initialize_translation_service
+from service.sllm import get_sllm_translation_service, initialize_sllm_translation_service
 
 
 # Initialize FastAPI app
@@ -67,6 +68,12 @@ async def startup_event():
             print("✅ Translation service initialized successfully")
         else:
             print("⚠️ Translation service initialization failed")
+        
+        # Initialize SLLM Translation service
+        if initialize_sllm_translation_service():
+            print("✅ SLLM Translation service initialized successfully")
+        else:
+            print("⚠️ SLLM Translation service initialization failed")
             
     except Exception as e:
         print(f"❌ Error initializing services: {e}")
@@ -385,8 +392,63 @@ async def translate_to_multiple_languages(request: MultipleTranslationRequest):
             detail=f"Multiple translation failed: {str(e)}"
         )
 
+# SLLM Translation endpoints
+class SLLMTranslationRequest(BaseModel):
+    text: str
+    source_language: str = "auto"
+    target_language: str = "en"
 
+@app.post("/sllm/translate", response_model=Dict[str, Any])
+async def sllm_translate_text(request: SLLMTranslationRequest):
+    """Translate text using SLLM (Small Language Model) via Ollama"""
+    try:
+        sllm_service = get_sllm_translation_service()
+        
+        if not sllm_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="SLLM Translation service not initialized"
+            )
+        
+        # Translate the text using SLLM
+        result = await sllm_service.translate_text(
+            text=request.text,
+            source_language=request.source_language if request.source_language != "auto" else None,
+            target_language=request.target_language
+        )
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"SLLM Translation failed: {str(e)}"
+        )
 
+@app.get("/sllm/status", response_model=Dict[str, Any])
+async def get_sllm_status():
+    """Get SLLM translation service status and statistics"""
+    try:
+        sllm_service = get_sllm_translation_service()
+        stats = sllm_service.get_statistics()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": stats
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get SLLM status: {str(e)}"
+        )
 
 if __name__ == "__main__":
     # Get configuration from environment variables
