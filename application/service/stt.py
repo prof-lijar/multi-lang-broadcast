@@ -554,25 +554,76 @@ class STTService:
         print("✅ Streaming restarted")
     
     async def transcribe_audio_file(self, audio_data: bytes, language_code: str = None) -> Dict[str, Any]:
-        """Transcribe audio from file data."""
+        """Transcribe audio from file data (supports WebM and WAV formats)."""
         if not self.is_initialized:
             raise Exception("STT service not initialized")
         
         try:
-            # Configure recognition
+            # Check if it's WebM format and convert if needed
+            if audio_data.startswith(b'\x1a\x45\xdf\xa3'):  # WebM magic bytes
+                # Convert WebM to WAV using ffmpeg
+                import tempfile
+                import subprocess
+                
+                with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as webm_file:
+                    webm_file.write(audio_data)
+                    webm_path = webm_file.name
+                
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as wav_file:
+                    wav_path = wav_file.name
+                
+                try:
+                    # Convert WebM to WAV using ffmpeg
+                    subprocess.run([
+                        'ffmpeg', '-i', webm_path, '-acodec', 'pcm_s16le', 
+                        '-ar', '16000', '-ac', '1', '-y', wav_path
+                    ], check=True, capture_output=True)
+                    
+                    # Read the converted WAV file
+                    with open(wav_path, 'rb') as f:
+                        audio_data = f.read()
+                    
+                finally:
+                    # Clean up temporary files
+                    try:
+                        os.unlink(webm_path)
+                        os.unlink(wav_path)
+                    except:
+                        pass
+            
+            # Configure recognition with improved settings for longer audio
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                 sample_rate_hertz=self.sample_rate,
                 language_code=language_code or self.language_code,
                 enable_automatic_punctuation=True,
-                model="latest_long",
+                model="latest_long",  # Use latest_long model for better long audio handling
                 use_enhanced=True,
+                enable_word_time_offsets=True,  # Enable word-level timing
+                enable_word_confidence=True,    # Enable word-level confidence
+                # Add audio channel count for better processing
+                audio_channel_count=1,
+                # Use alternative language codes for better accuracy
+                alternative_language_codes=[language_code or self.language_code]
             )
             
             audio = speech.RecognitionAudio(content=audio_data)
             
-            # Perform the recognition
-            response = self.speech_client.recognize(config=config, audio=audio)
+            # Perform the recognition with retry mechanism
+            max_retries = 3
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    response = self.speech_client.recognize(config=config, audio=audio)
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Recognition attempt {retry_count} failed: {e}, retrying...")
+                        await asyncio.sleep(1)  # Wait before retry
+                    else:
+                        raise e
             
             results = []
             for result in response.results:

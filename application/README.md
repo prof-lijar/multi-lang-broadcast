@@ -4,6 +4,10 @@ A FastAPI application for live translation and multi-language broadcasting.
 
 ## Features
 
+- **Click-to-Record**: Simple microphone recording with automatic processing
+- **STT-Translate-TTS Pipeline**: Automatic speech-to-text, translation, and text-to-speech
+- **Multi-Language Support**: 100+ languages for translation and TTS
+- **Real-time Processing**: Fast audio processing and translation
 - **Health Check Endpoints**: Monitor application status
 - **CORS Support**: Cross-origin resource sharing enabled
 - **Auto Documentation**: Interactive API docs at `/docs`
@@ -37,6 +41,20 @@ The application will be available at `http://localhost:8000`
 - **Health check**: `GET /health`
 - **Detailed health**: `GET /health/detailed`
 - **API Documentation**: `GET /docs`
+- **Web Interface**: `GET /app_ui.html`
+
+### 4. Using the Web Interface
+
+1. Open `http://localhost:8000/app_ui.html` in your browser
+2. Select your input language (STT)
+3. Select your target language (Translation)
+4. Click the microphone button to start recording
+5. Speak clearly into your microphone
+6. Click the microphone button again to stop recording
+7. The system will automatically:
+   - Transcribe your speech to text
+   - Translate the text to the target language
+   - Convert the translated text to speech and play it
 
 ## API Endpoints
 

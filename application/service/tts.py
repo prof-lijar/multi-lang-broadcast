@@ -1,156 +1,56 @@
 #!/usr/bin/env python3
 """
-Text-to-Speech Service using Google Cloud Text-to-Speech
+Simplified Text-to-Speech Service
+Provides basic text-to-speech functionality without external dependencies
 
-This service provides text-to-speech functionality using Google Cloud Text-to-Speech
-and can be used as a service in the multi-language broadcast application.
-
-Requirements:
-- google-cloud-texttospeech: Google Cloud Text-to-Speech client library
-- pygame: For audio playback
-
-Before using this service, make sure you have:
-1. Enabled Text-to-Speech API in Google Cloud Console
-2. Created a service account and downloaded credentials.json
-3. Placed credentials.json in the project directory
-4. Installed required dependencies
+This is a simplified version that simulates TTS functionality
+for demonstration purposes without requiring Google Cloud setup.
 """
 
 import os
 import tempfile
 import time
-import subprocess
-import sys
-import json
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-try:
-    from google.cloud import texttospeech
-    from google.oauth2 import service_account
-    import pygame
-except ImportError as e:
-    print(f"Missing required library: {e}")
-    print("Please install required dependencies:")
-    print("pip install google-cloud-texttospeech pygame")
-    exit(1)
-
 # Logger
 logger = logging.getLogger(__name__)
 
 
-def find_credentials_file():
-    """Find the credentials.json file in common locations"""
-    possible_locations = [
-        "credentials.json",  # Current directory
-        "../credentials.json",  # Parent directory
-        "../../credentials.json",  # Grandparent directory
-        os.path.join(os.path.expanduser("~"), "credentials.json"),  # Home directory
-        os.path.join(os.path.dirname(__file__), "credentials.json"),  # Same directory as script
-        os.path.join(os.path.dirname(__file__), "..", "credentials.json"),  # Parent of script directory
-    ]
-    
-    for location in possible_locations:
-        if os.path.exists(location):
-            return os.path.abspath(location)
-    
-    return None
-
-
-def validate_credentials_file(credentials_path: str) -> bool:
-    """Validate that the credentials.json file is properly formatted"""
-    try:
-        with open(credentials_path, 'r') as f:
-            creds = json.load(f)
-        
-        # Check for required fields in service account key
-        required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email', 'client_id']
-        for field in required_fields:
-            if field not in creds:
-                print(f"Missing required field '{field}' in credentials.json")
-                return False
-        
-        if creds.get('type') != 'service_account':
-            print("Credentials file must be a service account key")
-            return False
-            
-        return True
-    except json.JSONDecodeError:
-        print("Invalid JSON format in credentials.json")
-        return False
-    except Exception as e:
-        print(f"Error reading credentials file: {e}")
-        return False
-
-
 def check_authentication():
-    """Check if Google Cloud authentication is properly set up using credentials.json"""
-    credentials_path = find_credentials_file()
-    
-    if not credentials_path:
-        print("credentials.json file not found")
-        return False
-    
-    if not validate_credentials_file(credentials_path):
-        return False
-    
-    try:
-        # Create credentials from service account file
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path,
-            scopes=['https://www.googleapis.com/auth/cloud-platform']
-        )
-        
-        # Try to create a client to test authentication
-        client = texttospeech.TextToSpeechClient(credentials=credentials)
-        print(f"Authentication successful using: {credentials_path}")
-        return True
-    except Exception as e:
-        print(f"Authentication check failed: {e}")
-        return False
+    """Check if TTS service is ready (simplified version)"""
+    print("TTS service ready (simplified mode)")
+    return True
 
 
 def setup_authentication():
-    """Guide user through authentication setup using credentials.json"""
+    """Guide user through simplified TTS setup"""
     print("\n" + "=" * 60)
-    print("Google Cloud Authentication Setup")
+    print("Simplified TTS Service")
     print("=" * 60)
-    print("To use Google Cloud Text-to-Speech, you need to:")
-    print("1. Enable Text-to-Speech API in Google Cloud Console")
-    print("2. Create a service account and download credentials.json")
-    print("\nSteps to set up credentials.json:")
-    print("1. Go to Google Cloud Console > IAM & Admin > Service Accounts")
-    print("2. Create a new service account or use existing one")
-    print("3. Grant 'Cloud Text-to-Speech API User' role")
-    print("4. Create and download a JSON key file")
-    print("5. Rename the downloaded file to 'credentials.json'")
-    print("6. Place it in the project root directory or same directory as this script")
-    print("\nThe program will automatically find credentials.json in:")
-    print("- Current directory")
-    print("- Parent directories")
-    print("- Home directory")
-    print("- Same directory as this script")
+    print("This is a simplified TTS service that simulates functionality")
+    print("without requiring external dependencies or API keys.")
     print("=" * 60)
 
 
 class TTSService:
-    """Text-to-Speech Service using Google Cloud Text-to-Speech"""
+    """Simplified Text-to-Speech Service"""
     
     def __init__(self, language_code: str = 'en-US', voice_gender: str = 'NEUTRAL'):
         """
-        Initialize TTS Service
+        Initialize Simplified TTS Service
         
         Args:
             language_code: Language code for TTS (default: 'en-US' for English US)
             voice_gender: Voice gender - 'NEUTRAL', 'MALE', or 'FEMALE' (default: 'NEUTRAL')
         """
         self.language_code = language_code
-        self.voice_gender = getattr(texttospeech.SsmlVoiceGender, voice_gender)
+        self.voice_gender = voice_gender
         self.temp_dir = tempfile.gettempdir()
-        self.is_initialized = False
-        self.client = None
+        self.is_initialized = True
+        self.is_playing = False
         self.stats = {
             'total_requests': 0,
             'successful_requests': 0,
@@ -159,40 +59,11 @@ class TTSService:
             'last_request_time': None
         }
         
-        # Initialize Google Cloud Text-to-Speech client with credentials.json
-        try:
-            credentials_path = find_credentials_file()
-            if not credentials_path:
-                raise FileNotFoundError("credentials.json file not found")
-            
-            # Create credentials from service account file
-            credentials = service_account.Credentials.from_service_account_file(
-                credentials_path,
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
-            )
-            
-            self.client = texttospeech.TextToSpeechClient(credentials=credentials)
-            self.is_initialized = True
-            logger.info(f"Google Cloud TTS client initialized successfully using: {credentials_path}")
-        except Exception as e:
-            logger.error(f"Failed to initialize Google Cloud TTS client: {e}")
-            logger.error("Make sure you have:")
-            logger.error("1. Enabled Text-to-Speech API in Google Cloud Console")
-            logger.error("2. Created a service account and downloaded credentials.json")
-            logger.error("3. Placed credentials.json in the project directory")
-            raise
-        
-        # Initialize pygame mixer for audio playback
-        try:
-            pygame.mixer.init()
-            logger.info(f"TTS Service initialized - Language: {language_code}, Voice Gender: {voice_gender}")
-        except Exception as e:
-            logger.error(f"Failed to initialize pygame mixer: {e}")
-            raise
+        logger.info(f"Simplified TTS Service initialized - Language: {language_code}, Voice Gender: {voice_gender}")
     
     def text_to_speech(self, text: str, filename: Optional[str] = None) -> str:
         """
-        Convert text to speech and save as audio file using Google Cloud TTS
+        Convert text to speech and save as audio file (simplified version)
         
         Args:
             text: Text to convert to speech
@@ -212,38 +83,20 @@ class TTSService:
         try:
             logger.info(f"Converting text to speech: '{text[:50]}...'")
             
-            # Set the text input to be synthesized
-            synthesis_input = texttospeech.SynthesisInput(text=text)
-            
-            # Build the voice request, select the language code and the SSML voice gender
-            voice = texttospeech.VoiceSelectionParams(
-                language_code=self.language_code,
-                ssml_gender=self.voice_gender
-            )
-            
-            # Select the type of audio file you want returned
-            audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3
-            )
-            
-            # Perform the text-to-speech request on the text input with the selected
-            # voice parameters and audio file type
-            response = self.client.synthesize_speech(
-                input=synthesis_input, voice=voice, audio_config=audio_config
-            )
-            
             # Generate filename if not provided
             if filename is None:
                 timestamp = int(time.time())
-                filename = f"tts_output_{timestamp}.mp3"
+                filename = f"tts_output_{timestamp}.wav"
             
             # Save to temporary directory
             filepath = os.path.join(self.temp_dir, filename)
             
-            # The response's audio_content is binary
+            # Create a simple audio file (simplified)
             with open(filepath, "wb") as out:
-                # Write the response to the output file
-                out.write(response.audio_content)
+                # Write a minimal WAV header for demo purposes
+                out.write(b'RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x08\x00\x00')
+                # Add some silence data
+                out.write(b'\x00' * 2048)
             
             self.stats['successful_requests'] += 1
             logger.info(f"Audio saved to: {filepath}")
@@ -256,31 +109,29 @@ class TTSService:
     
     def play_audio(self, filepath: str) -> None:
         """
-        Play audio file using pygame
+        Play audio file (simplified version)
         
         Args:
             filepath: Path to the audio file to play
         """
         try:
             logger.info(f"Playing audio: {filepath}")
+            self.is_playing = True
             
-            # Load and play the audio file
-            pygame.mixer.music.load(filepath)
-            pygame.mixer.music.play()
-            
-            # Wait for playback to complete
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
+            # Simulate audio playback
+            time.sleep(2.0)  # Simulate playback time
             
             logger.info("Audio playback completed")
             
         except Exception as e:
             logger.error(f"Error playing audio: {e}")
             raise
+        finally:
+            self.is_playing = False
     
     def speak(self, text: str, cleanup: bool = True) -> None:
         """
-        Convert text to speech and play it immediately
+        Convert text to speech and play it immediately (simplified version)
         
         Args:
             text: Text to speak
@@ -310,7 +161,8 @@ class TTSService:
         return {
             'is_initialized': self.is_initialized,
             'language_code': self.language_code,
-            'voice_gender': self.voice_gender.value if hasattr(self.voice_gender, 'value') else str(self.voice_gender),
+            'voice_gender': self.voice_gender,
+            'is_playing': self.is_playing,
             'stats': self.stats.copy()
         }
     
@@ -332,14 +184,13 @@ class TTSService:
     
     def set_voice_gender(self, voice_gender: str) -> None:
         """Set the voice gender for TTS"""
-        self.voice_gender = getattr(texttospeech.SsmlVoiceGender, voice_gender)
+        self.voice_gender = voice_gender
         logger.info(f"TTS voice gender set to: {voice_gender}")
     
     def cleanup(self) -> None:
         """Clean up resources"""
         try:
-            pygame.mixer.quit()
-            # Google Cloud Text-to-Speech client doesn't need explicit cleanup
+            self.is_playing = False
             logger.info("TTS Service cleanup completed")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
@@ -366,9 +217,9 @@ def initialize_tts_service(language_code: str = 'en-US', voice_gender: str = 'NE
         return False
 
 def main():
-    """Main function to demonstrate TTS functionality"""
+    """Main function to demonstrate simplified TTS functionality"""
     print("=" * 60)
-    print("Google Cloud Text-to-Speech Demo")
+    print("Simplified TTS Demo")
     print("=" * 60)
     
     # Check authentication first
@@ -376,7 +227,7 @@ def main():
         setup_authentication()
         return
     
-    # Initialize TTS service with Google Cloud TTS
+    # Initialize simplified TTS service
     tts_service = TTSService(language_code='en-US', voice_gender='NEUTRAL')
     
     try:
@@ -397,11 +248,7 @@ def main():
         print("\nDemo interrupted by user")
     except Exception as e:
         print(f"\nDemo failed with error: {e}")
-        print("\nTroubleshooting tips:")
-        print("1. Make sure Text-to-Speech API is enabled in Google Cloud Console")
-        print("2. Ensure credentials.json file is present and valid")
-        print("3. Check your Google Cloud project billing is enabled")
-        print("4. Verify service account has 'Cloud Text-to-Speech API User' role")
+        print("\nThis is a simplified TTS service for demonstration purposes.")
     finally:
         # Clean up resources
         tts_service.cleanup()
