@@ -191,12 +191,94 @@ class SLLMTranslationService:
         Returns:
             str: Formatted prompt for translation
         """
-        if source_language and target_language:
-            return f"translate this {text} from {source_language} to {target_language}"
+        # Language code to full name mapping with script specifications
+        language_names = {
+            'en': 'English',
+            'ko': 'Korean (using Hangul script)',
+            'zh': 'Chinese (using Simplified Chinese characters)',
+            'ja': 'Japanese (using Hiragana, Katakana, and Kanji)',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian (using Cyrillic script)',
+            'ar': 'Arabic (using Arabic script)',
+            'hi': 'Hindi (using Devanagari script)',
+            'th': 'Thai (using Thai script)',
+            'vi': 'Vietnamese',
+            'tr': 'Turkish',
+            'pl': 'Polish',
+            'nl': 'Dutch',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish',
+            'cs': 'Czech',
+            'hu': 'Hungarian',
+            'ro': 'Romanian',
+            'bg': 'Bulgarian (using Cyrillic script)',
+            'hr': 'Croatian',
+            'sk': 'Slovak',
+            'sl': 'Slovenian',
+            'et': 'Estonian',
+            'lv': 'Latvian',
+            'lt': 'Lithuanian',
+            'el': 'Greek (using Greek script)',
+            'he': 'Hebrew (using Hebrew script)',
+            'fa': 'Persian (using Arabic script)',
+            'ur': 'Urdu (using Arabic script)',
+            'bn': 'Bengali (using Bengali script)',
+            'ta': 'Tamil (using Tamil script)',
+            'te': 'Telugu (using Telugu script)',
+            'ml': 'Malayalam (using Malayalam script)',
+            'kn': 'Kannada (using Kannada script)',
+            'gu': 'Gujarati (using Gujarati script)',
+            'pa': 'Punjabi (using Gurmukhi script)',
+            'ne': 'Nepali (using Devanagari script)',
+            'si': 'Sinhala (using Sinhala script)',
+            'my': 'Burmese (using Myanmar script)',
+            'km': 'Khmer (using Khmer script)',
+            'lo': 'Lao (using Lao script)',
+            'ka': 'Georgian (using Georgian script)',
+            'am': 'Amharic (using Geez script)',
+            'sw': 'Swahili',
+            'zu': 'Zulu',
+            'af': 'Afrikaans',
+            'is': 'Icelandic',
+            'ga': 'Irish',
+            'cy': 'Welsh',
+            'mt': 'Maltese',
+            'eu': 'Basque',
+            'ca': 'Catalan',
+            'gl': 'Galician'
+        }
+        
+        # Get language names
+        source_name = language_names.get(source_language, source_language) if source_language else 'English'
+        target_name = language_names.get(target_language, target_language) if target_language else 'English'
+        
+        # Create clear, specific prompt with script emphasis
+        if source_language and target_language and source_language != target_language:
+            if target_language == 'ko':
+                return f"Translate the following text from {source_name} to {target_name}. IMPORTANT: Output must be in Korean Hangul script (한글), not Chinese characters. ONLY provide the direct translation, nothing else, no questions, no additional text:\n\n{text}"
+            elif target_language == 'zh':
+                return f"Translate the following text from {source_name} to {target_name}. IMPORTANT: Output must be in Simplified Chinese characters (简体中文), not Korean Hangul. Only provide the translation, no explanations:\n\n{text}"
+            elif target_language == 'ja':
+                return f"Translate the following text from {source_name} to {target_name}. IMPORTANT: Output must be in Japanese (ひらがな、カタカナ、漢字), not Korean Hangul. Only provide the translation, no explanations:\n\n{text}"
+            else:
+                return f"Translate the following text from {source_name} to {target_name}. ONLY provide the direct translation, nothing else, no questions, no additional text:\n\n{text}"
         elif target_language:
-            return f"translate this {text} to {target_language}"
+            if target_language == 'ko':
+                return f"Translate the following text to {target_name}. IMPORTANT: Output must be in Korean Hangul script (한글), not Chinese characters. ONLY provide the direct translation, nothing else, no questions, no additional text:\n\n{text}"
+            elif target_language == 'zh':
+                return f"Translate the following text to {target_name}. IMPORTANT: Output must be in Simplified Chinese characters (简体中文), not Korean Hangul. Only provide the translation, no explanations:\n\n{text}"
+            elif target_language == 'ja':
+                return f"Translate the following text to {target_name}. IMPORTANT: Output must be in Japanese (ひらがな、カタカナ、漢字), not Korean Hangul. Only provide the translation, no explanations:\n\n{text}"
+            else:
+                return f"Translate the following text to {target_name}. ONLY provide the direct translation, nothing else, no questions, no additional text:\n\n{text}"
         else:
-            return f"translate this {text} to english"
+            return f"Translate the following text to English. ONLY provide the direct translation, nothing else, no questions, no additional text:\n\n{text}"
     
     def _display_translation(self, result: Dict[str, Any]) -> None:
         """

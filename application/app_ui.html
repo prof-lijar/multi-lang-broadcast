@@ -57,6 +57,228 @@
             border: 1px solid #e9ecef;
         }
 
+        .audio-devices-section {
+            margin-top: 20px;
+        }
+
+        .device-selector h3 {
+            color: #333;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .device-mapping {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .device-mapping-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .device-mapping-item label {
+            font-weight: 500;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        .device-select {
+            padding: 10px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            background: white;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .device-select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        .device-select:hover {
+            border-color: #007bff;
+        }
+
+        .audio-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .test-speakers-btn, .stop-audio-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .test-speakers-btn {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+        }
+
+        .test-speakers-btn:hover {
+            background: linear-gradient(135deg, #218838, #1ea085);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .stop-audio-btn {
+            background: linear-gradient(135deg, #dc3545, #fd7e14);
+            color: white;
+        }
+
+        .stop-audio-btn:hover {
+            background: linear-gradient(135deg, #c82333, #e55a00);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        }
+
+        .auto-play-settings {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .auto-play-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .auto-play-toggle input[type="checkbox"] {
+            display: none;
+        }
+
+        .toggle-slider {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .auto-play-toggle input[type="checkbox"]:checked + .toggle-slider {
+            background: #28a745;
+        }
+
+        .auto-play-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+            transform: translateX(26px);
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .devices-list {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .device-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .device-details {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .device-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+
+        .status-indicator.idle {
+            background: #6c757d;
+        }
+
+        .status-indicator.playing {
+            background: #007bff;
+            animation: pulse 1s infinite;
+        }
+
+        .status-indicator.error {
+            background: #dc3545;
+        }
+
+        .loading-devices {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+        }
+
         .model-selector {
             display: flex;
             gap: 20px;
@@ -209,6 +431,54 @@
             font-weight: 600;
         }
 
+        .language-source-selector {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border: 2px solid #e9ecef;
+        }
+
+        .language-source-selector h3 {
+            color: #333;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .source-language-options {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .source-language-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .source-language-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .source-language-option input[type="radio"] {
+            margin: 0;
+        }
+
+        .source-language-option:has(input:checked) {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
         .transcription-box {
             background: #f8f9fa;
             border: 2px solid #e9ecef;
@@ -296,6 +566,31 @@
             transform: none;
         }
 
+        .play-speaker-button {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .play-speaker-button:hover {
+            background: #138496;
+            transform: translateY(-1px);
+        }
+
+        .play-speaker-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .volume-control {
             width: 100px;
             height: 5px;
@@ -366,6 +661,28 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        @keyframes slideIn {
+            from { 
+                transform: translateX(100%); 
+                opacity: 0; 
+            }
+            to { 
+                transform: translateX(0); 
+                opacity: 1; 
+            }
+        }
+
+        @keyframes slideOut {
+            from { 
+                transform: translateX(0); 
+                opacity: 1; 
+            }
+            to { 
+                transform: translateX(100%); 
+                opacity: 0; 
+            }
         }
 
         @media (max-width: 768px) {
@@ -442,6 +759,51 @@
             </div>
         </div>
 
+        <div class="settings-section">
+            <h2 class="section-title">🔊 Audio Output Settings</h2>
+            <div class="audio-devices-section">
+                <div class="device-selector">
+                    <h3>🔊 Available Audio Devices:</h3>
+                    <div class="devices-list" id="devicesList">
+                        <div class="loading-devices">🔄 Loading audio devices...</div>
+                    </div>
+                    
+                    <h3>🎯 Language-Speaker Assignment:</h3>
+                    <div class="device-mapping">
+                        <div class="device-mapping-item">
+                            <label for="koreanSpeaker">🇰🇷 Korean Speaker:</label>
+                            <select id="koreanSpeaker" class="device-select">
+                                <option value="">Select Speaker</option>
+                            </select>
+                        </div>
+                        <div class="device-mapping-item">
+                            <label for="chineseSpeaker">🇨🇳 Chinese Speaker:</label>
+                            <select id="chineseSpeaker" class="device-select">
+                                <option value="">Select Speaker</option>
+                            </select>
+                        </div>
+                        <div class="device-mapping-item">
+                            <label for="japaneseSpeaker">🇯🇵 Japanese Speaker:</label>
+                            <select id="japaneseSpeaker" class="device-select">
+                                <option value="">Select Speaker</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="audio-controls">
+                        <button class="test-speakers-btn" onclick="testAllSpeakers()">🔊 Test All Speakers</button>
+                        <button class="stop-audio-btn" onclick="stopAllAudio()">⏹️ Stop All Audio</button>
+                    </div>
+                    <div class="auto-play-settings">
+                        <label class="auto-play-toggle">
+                            <input type="checkbox" id="autoPlayEnabled" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">🎵 Auto-play on speakers when translations are ready</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="recording-section">
             <button class="mic-button" id="micButton" onclick="toggleRecording()">
                 <div class="mic-icon">🎤</div>
@@ -461,6 +823,24 @@
 
         <div class="translations-section">
             <h2 class="section-title">🌐 Translations</h2>
+            
+            <!-- Language Source Selection -->
+            <div class="language-source-selector">
+                <h3>Source Language:</h3>
+                <div class="source-language-options">
+                    <label class="source-language-option">
+                        <input type="radio" name="sourceLanguage" value="en" checked>
+                        <span class="language-flag">🇺🇸</span>
+                        <span>English → Korean, Chinese, Japanese</span>
+                    </label>
+                    <label class="source-language-option">
+                        <input type="radio" name="sourceLanguage" value="ko">
+                        <span class="language-flag">🇰🇷</span>
+                        <span>Korean → English, Chinese, Japanese</span>
+                    </label>
+                </div>
+            </div>
+            
             <div class="translations-grid">
                 <div class="translation-card">
                     <div class="language-header">
@@ -473,6 +853,9 @@
                     <div class="audio-controls">
                         <button class="play-button" id="koreanPlay" onclick="playAudio('korean')" disabled>
                             ▶️ Play
+                        </button>
+                        <button class="play-speaker-button" id="koreanSpeakerPlay" onclick="playOnSpeaker('korean')" disabled>
+                            🔊 Play on Speaker
                         </button>
                         <input type="range" class="volume-control" min="0" max="100" value="50" id="koreanVolume">
                     </div>
@@ -490,6 +873,9 @@
                         <button class="play-button" id="chinesePlay" onclick="playAudio('chinese')" disabled>
                             ▶️ Play
                         </button>
+                        <button class="play-speaker-button" id="chineseSpeakerPlay" onclick="playOnSpeaker('chinese')" disabled>
+                            🔊 Play on Speaker
+                        </button>
                         <input type="range" class="volume-control" min="0" max="100" value="50" id="chineseVolume">
                     </div>
                 </div>
@@ -505,6 +891,9 @@
                     <div class="audio-controls">
                         <button class="play-button" id="japanesePlay" onclick="playAudio('japanese')" disabled>
                             ▶️ Play
+                        </button>
+                        <button class="play-speaker-button" id="japaneseSpeakerPlay" onclick="playOnSpeaker('japanese')" disabled>
+                            🔊 Play on Speaker
                         </button>
                         <input type="range" class="volume-control" min="0" max="100" value="50" id="japaneseVolume">
                     </div>
@@ -535,6 +924,8 @@
     <script>
         let isRecording = false;
         let currentAudioData = null;
+        let availableDevices = [];
+        let currentTranslations = {};
 
         // Initialize status indicators
         function initializeStatus() {
@@ -624,6 +1015,17 @@
             }
         }
 
+        // Map UI source language values to STT language codes (used by /record/transcribe)
+        function getSttLanguageCode() {
+            const source = getSelectedSourceLanguage();
+            // Extend this mapping as you add more source languages
+            const mapping = {
+                'en': 'en-US',
+                'ko': 'ko-KR'
+            };
+            return mapping[source] || 'en-US';
+        }
+
         // Process audio with STT service
         async function processAudio(audioData) {
             const transcriptionBox = document.getElementById('transcriptionBox');
@@ -641,7 +1043,7 @@
                     },
                     body: JSON.stringify({
                         audio_data: audioData,
-                        language_code: 'en-US'
+                        language_code: getSttLanguageCode()
                     })
                 });
 
@@ -698,20 +1100,39 @@
             return selectedModel ? selectedModel.value : 'google';
         }
 
+        // Get selected source language
+        function getSelectedSourceLanguage() {
+            const selectedSource = document.querySelector('input[name="sourceLanguage"]:checked');
+            console.log('Selected source element:', selectedSource);
+            console.log('Selected source value:', selectedSource ? selectedSource.value : 'none');
+            return selectedSource ? selectedSource.value : 'en';
+        }
+
         // Translate text to multiple languages
         async function translateText(text) {
             try {
                 updateStatus('translationStatus', 'processing');
                 
                 const selectedModel = getSelectedModel();
-                console.log('Using translation model:', selectedModel);
+                const sourceLanguage = getSelectedSourceLanguage();
+                console.log('Using translation model:', selectedModel, 'Source language:', sourceLanguage);
                 
-                if (selectedModel === 'sllm') {
-                    // Use SLLM for individual translations
-                    await translateWithSLLM(text);
+                if (sourceLanguage === 'ko') {
+                    // Korean source translations
+                    if (selectedModel === 'sllm') {
+                        await translateKoreanWithSLLM(text);
+                    } else if (selectedModel === 'nllb') {
+                        await translateKoreanWithNLLB(text);
+                    } else {
+                        await translateKoreanWithGoogle(text);
+                    }
                 } else {
-                    // Use Google Translate for multiple languages
-                    await translateWithGoogle(text);
+                    // English source translations (original behavior)
+                    if (selectedModel === 'sllm') {
+                        await translateWithSLLM(text);
+                    } else {
+                        await translateWithGoogle(text);
+                    }
                 }
                 
             } catch (error) {
@@ -750,6 +1171,7 @@
                     if (translations.ko && translations.ko.translated_text) {
                         document.getElementById('koreanText').textContent = translations.ko.translated_text;
                         document.getElementById('koreanPlay').disabled = false;
+                        document.getElementById('koreanSpeakerPlay').disabled = false;
                     } else {
                         document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.ko?.error || 'Unknown error');
                     }
@@ -758,6 +1180,7 @@
                     if (translations.zh && translations.zh.translated_text) {
                         document.getElementById('chineseText').textContent = translations.zh.translated_text;
                         document.getElementById('chinesePlay').disabled = false;
+                        document.getElementById('chineseSpeakerPlay').disabled = false;
                     } else {
                         document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
                     }
@@ -766,6 +1189,136 @@
                     if (translations.ja && translations.ja.translated_text) {
                         document.getElementById('japaneseText').textContent = translations.ja.translated_text;
                         document.getElementById('japanesePlay').disabled = false;
+                        document.getElementById('japaneseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
+                    }
+                    
+                    updateStatus('translationStatus', 'ready');
+                    updateStatus('ttsStatus', 'ready');
+                    
+                    // Auto-play on speakers if configured
+                    setTimeout(() => {
+                        autoPlayOnSpeakers();
+                    }, 1000); // Small delay to ensure UI is updated
+                } else {
+                    throw new Error('Invalid translation response');
+                }
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'Google Translation failed');
+            }
+        }
+
+        // Translate with SLLM (multiple languages at once)
+        async function translateWithSLLM(text) {
+            const response = await fetch('/sllm/translate/multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    source_language: 'en'
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('SLLM Translation result:', result);
+                
+                if (result.data && result.data.translations) {
+                    const translations = result.data.translations;
+                    
+                    // Update Korean translation
+                    if (translations.ko && translations.ko.translated_text) {
+                        document.getElementById('koreanText').textContent = translations.ko.translated_text;
+                        document.getElementById('koreanPlay').disabled = false;
+                        document.getElementById('koreanSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.ko?.error || 'Unknown error');
+                    }
+                    
+                    // Update Chinese translation
+                    if (translations.zh && translations.zh.translated_text) {
+                        document.getElementById('chineseText').textContent = translations.zh.translated_text;
+                        document.getElementById('chinesePlay').disabled = false;
+                        document.getElementById('chineseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
+                    }
+                    
+                    // Update Japanese translation
+                    if (translations.ja && translations.ja.translated_text) {
+                        document.getElementById('japaneseText').textContent = translations.ja.translated_text;
+                        document.getElementById('japanesePlay').disabled = false;
+                        document.getElementById('japaneseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
+                    }
+                    
+                    updateStatus('translationStatus', 'ready');
+                    updateStatus('ttsStatus', 'ready');
+                    
+                    // Auto-play on speakers if configured
+                    setTimeout(() => {
+                        autoPlayOnSpeakers();
+                    }, 1000); // Small delay to ensure UI is updated
+                } else {
+                    throw new Error('Invalid SLLM translation response');
+                }
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'SLLM Translation failed');
+            }
+        }
+
+        // Korean source translation functions
+        async function translateKoreanWithGoogle(text) {
+            // Use the existing multiple-target translation endpoint and specify source_language 'ko'
+            const response = await fetch('/translate/multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    source_language: 'ko'
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Korean Google Translation result:', result);
+                
+                if (result.data && result.data.translations) {
+                    const translations = result.data.translations;
+                    
+                    // Update English translation (from Korean)
+                    if (translations.en && translations.en.translated_text) {
+                        document.getElementById('koreanText').textContent = translations.en.translated_text;
+                        document.getElementById('koreanText').parentElement.querySelector('.language-name').textContent = 'English';
+                        document.getElementById('koreanText').parentElement.querySelector('.language-flag').textContent = '🇺🇸';
+                        document.getElementById('koreanPlay').disabled = false;
+                        document.getElementById('koreanSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.en?.error || 'Unknown error');
+                    }
+                    
+                    // Update Chinese translation (from Korean)
+                    if (translations.zh && translations.zh.translated_text) {
+                        document.getElementById('chineseText').textContent = translations.zh.translated_text;
+                        document.getElementById('chinesePlay').disabled = false;
+                        document.getElementById('chineseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
+                    }
+                    
+                    // Update Japanese translation (from Korean)
+                    if (translations.ja && translations.ja.translated_text) {
+                        document.getElementById('japaneseText').textContent = translations.ja.translated_text;
+                        document.getElementById('japanesePlay').disabled = false;
+                        document.getElementById('japaneseSpeakerPlay').disabled = false;
                     } else {
                         document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
                     }
@@ -777,55 +1330,130 @@
                 }
             } else {
                 const error = await response.json();
-                throw new Error(error.detail || 'Google Translation failed');
+                throw new Error(error.detail || 'Korean Google Translation failed');
             }
         }
 
-        // Translate with SLLM (individual translations)
-        async function translateWithSLLM(text) {
-            const languages = [
-                { code: 'ko', name: 'Korean', element: 'koreanText', playButton: 'koreanPlay' },
-                { code: 'zh', name: 'Chinese', element: 'chineseText', playButton: 'chinesePlay' },
-                { code: 'ja', name: 'Japanese', element: 'japaneseText', playButton: 'japanesePlay' }
-            ];
+        async function translateKoreanWithSLLM(text) {
+            // Use the SLLM multiple-target endpoint and specify source_language 'ko'
+            const response = await fetch('/sllm/translate/multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    source_language: 'ko'
+                })
+            });
 
-            // Translate to each language individually
-            for (const lang of languages) {
-                try {
-                    const response = await fetch('/sllm/translate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            text: text,
-                            source_language: 'en',
-                            target_language: lang.code
-                        })
-                    });
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        console.log(`SLLM Translation result for ${lang.name}:`, result);
-                        
-                        if (result.data && result.data.success && result.data.translated_text) {
-                            document.getElementById(lang.element).textContent = result.data.translated_text;
-                            document.getElementById(lang.playButton).disabled = false;
-                        } else {
-                            document.getElementById(lang.element).textContent = 'Translation failed: ' + (result.data?.error || 'Unknown error');
-                        }
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Korean SLLM Translation result:', result);
+                
+                if (result.data && result.data.translations) {
+                    const translations = result.data.translations;
+                    
+                    // Update English translation (from Korean)
+                    if (translations.en && translations.en.translated_text) {
+                        document.getElementById('koreanText').textContent = translations.en.translated_text;
+                        document.getElementById('koreanText').parentElement.querySelector('.language-name').textContent = 'English';
+                        document.getElementById('koreanText').parentElement.querySelector('.language-flag').textContent = '🇺🇸';
+                        document.getElementById('koreanPlay').disabled = false;
+                        document.getElementById('koreanSpeakerPlay').disabled = false;
                     } else {
-                        const error = await response.json();
-                        document.getElementById(lang.element).textContent = 'Translation failed: ' + (error.detail || 'Unknown error');
+                        document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.en?.error || 'Unknown error');
                     }
-                } catch (error) {
-                    console.error(`Error translating to ${lang.name}:`, error);
-                    document.getElementById(lang.element).textContent = 'Translation failed: ' + error.message;
+                    
+                    // Update Chinese translation (from Korean)
+                    if (translations.zh && translations.zh.translated_text) {
+                        document.getElementById('chineseText').textContent = translations.zh.translated_text;
+                        document.getElementById('chinesePlay').disabled = false;
+                        document.getElementById('chineseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
+                    }
+                    
+                    // Update Japanese translation (from Korean)
+                    if (translations.ja && translations.ja.translated_text) {
+                        document.getElementById('japaneseText').textContent = translations.ja.translated_text;
+                        document.getElementById('japanesePlay').disabled = false;
+                        document.getElementById('japaneseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
+                    }
+                    
+                    updateStatus('translationStatus', 'ready');
+                    updateStatus('ttsStatus', 'ready');
+                } else {
+                    throw new Error('Invalid translation response');
                 }
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'Korean SLLM Translation failed');
             }
-            
-            updateStatus('translationStatus', 'ready');
-            updateStatus('ttsStatus', 'ready');
+        }
+
+        async function translateKoreanWithNLLB(text) {
+            // Fallback to the generic multiple-target endpoint and include a marker to use NLLB on the server if available
+            const response = await fetch('/translate/multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    source_language: 'ko',
+                    // optional: server can use this to pick NLLB model if supported
+                    model: 'nllb'
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Korean NLLB Translation result:', result);
+                
+                if (result.data && result.data.translations) {
+                    const translations = result.data.translations;
+                    
+                    // Update English translation (from Korean)
+                    if (translations.en && translations.en.translated_text) {
+                        document.getElementById('koreanText').textContent = translations.en.translated_text;
+                        document.getElementById('koreanText').parentElement.querySelector('.language-name').textContent = 'English';
+                        document.getElementById('koreanText').parentElement.querySelector('.language-flag').textContent = '🇺🇸';
+                        document.getElementById('koreanPlay').disabled = false;
+                        document.getElementById('koreanSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('koreanText').textContent = 'Translation failed: ' + (translations.en?.error || 'Unknown error');
+                    }
+                    
+                    // Update Chinese translation (from Korean)
+                    if (translations.zh && translations.zh.translated_text) {
+                        document.getElementById('chineseText').textContent = translations.zh.translated_text;
+                        document.getElementById('chinesePlay').disabled = false;
+                        document.getElementById('chineseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('chineseText').textContent = 'Translation failed: ' + (translations.zh?.error || 'Unknown error');
+                    }
+                    
+                    // Update Japanese translation (from Korean)
+                    if (translations.ja && translations.ja.translated_text) {
+                        document.getElementById('japaneseText').textContent = translations.ja.translated_text;
+                        document.getElementById('japanesePlay').disabled = false;
+                        document.getElementById('japaneseSpeakerPlay').disabled = false;
+                    } else {
+                        document.getElementById('japaneseText').textContent = 'Translation failed: ' + (translations.ja?.error || 'Unknown error');
+                    }
+                    
+                    updateStatus('translationStatus', 'ready');
+                    updateStatus('ttsStatus', 'ready');
+                } else {
+                    throw new Error('Invalid translation response');
+                }
+            } else {
+                const error = await response.json();
+                throw new Error(error.detail || 'Korean NLLB Translation failed');
+            }
         }
 
         // Play audio function (placeholder for TTS integration)
@@ -855,10 +1483,500 @@
             }
         }
 
+        // Load available audio devices
+        async function loadAudioDevices() {
+            try {
+                const response = await fetch('/audio/devices');
+                if (response.ok) {
+                    const result = await response.json();
+                    availableDevices = result.data.devices;
+                    displayDevicesList();
+                    populateDeviceSelectors();
+                    console.log('Audio devices loaded:', availableDevices);
+                } else {
+                    console.error('Failed to load audio devices');
+                    showDevicesError('Failed to load audio devices');
+                }
+            } catch (error) {
+                console.error('Error loading audio devices:', error);
+                showDevicesError('Error loading audio devices: ' + error.message);
+            }
+        }
+
+        // Display devices list in the UI
+        function displayDevicesList() {
+            const devicesList = document.getElementById('devicesList');
+            if (!devicesList) return;
+
+            if (availableDevices.length === 0) {
+                devicesList.innerHTML = '<div class="loading-devices">❌ No audio devices found</div>';
+                return;
+            }
+
+            let html = '';
+            availableDevices.forEach((device, index) => {
+                const isDefault = device.is_default ? ' (Default)' : '';
+                const statusClass = device.status === 'playing' ? 'playing' : 
+                                  device.status === 'error' ? 'error' : 'idle';
+                
+                html += `
+                    <div class="device-item" data-device-id="${device.index}">
+                        <div class="device-info">
+                            <div class="device-name">${device.name}${isDefault}</div>
+                            <div class="device-details">
+                                Device ${device.index} • ${device.max_output_channels} output channels • ${device.default_samplerate}Hz
+                            </div>
+                        </div>
+                        <div class="device-status">
+                            <div class="status-indicator ${statusClass}"></div>
+                            <span class="status-text">${device.status || 'Ready'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            devicesList.innerHTML = html;
+        }
+
+        // Show error in devices list
+        function showDevicesError(message) {
+            const devicesList = document.getElementById('devicesList');
+            if (devicesList) {
+                devicesList.innerHTML = `<div class="loading-devices">❌ ${message}</div>`;
+            }
+        }
+
+        // Populate device selector dropdowns
+        function populateDeviceSelectors() {
+            const selectors = ['koreanSpeaker', 'chineseSpeaker', 'japaneseSpeaker'];
+            
+            selectors.forEach(selectorId => {
+                const selector = document.getElementById(selectorId);
+                if (selector) {
+                    // Clear existing options except the first one
+                    selector.innerHTML = '<option value="">Select Speaker</option>';
+                    
+                    // Add device options
+                    availableDevices.forEach(device => {
+                        if (device.max_output_channels > 0) {
+                            const option = document.createElement('option');
+                            option.value = device.index;
+                            
+                            // Create a more descriptive option text
+                            let optionText = `${device.name}`;
+                            if (device.is_default) {
+                                optionText += ' (Default)';
+                            }
+                            optionText += ` - ${device.max_output_channels}ch @ ${device.default_samplerate}Hz`;
+                            
+                            option.textContent = optionText;
+                            selector.appendChild(option);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Test all speakers
+        async function testAllSpeakers() {
+            const deviceMappings = {
+                'ko': document.getElementById('koreanSpeaker').value,
+                'zh': document.getElementById('chineseSpeaker').value,
+                // 'ja': document.getElementById('japaneseSpeaker').value
+            };
+
+            const testTexts = {
+                'ko': '안녕하세요. 한국어 테스트입니다.',
+                'zh': '你好。这是中文测试。',
+                // 'ja': 'こんにちは。これは日本語のテストです。'
+            };
+
+            const validMappings = {};
+            const translations = {};
+
+            // Check which speakers are configured
+            for (const [lang, deviceId] of Object.entries(deviceMappings)) {
+                if (deviceId && deviceId !== '') {
+                    validMappings[lang] = parseInt(deviceId);
+                    translations[lang] = testTexts[lang];
+                }
+            }
+
+            if (Object.keys(validMappings).length === 0) {
+                alert('Please select at least one speaker to test.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/tts/play-multi', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        translations: translations,
+                        device_mapping: validMappings,
+                        languages: {
+                            'ko': 'ko',
+                            'zh': 'zh',
+                            'ja': 'ja'
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Speaker test result:', result);
+                    alert(`Testing ${Object.keys(validMappings).length} speakers. Check your audio devices.`);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Speaker test failed');
+                }
+            } catch (error) {
+                console.error('Error testing speakers:', error);
+                alert('Failed to test speakers: ' + error.message);
+            }
+        }
+
+        // Stop all audio
+        async function stopAllAudio() {
+            try {
+                const response = await fetch('/tts/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    console.log('All audio stopped');
+                } else {
+                    console.error('Failed to stop audio');
+                }
+            } catch (error) {
+                console.error('Error stopping audio:', error);
+            }
+        }
+
+        // Play audio on specific speaker
+        async function playOnSpeaker(language) {
+            const text = document.getElementById(language + 'Text').textContent;
+            const speakerSelect = document.getElementById(language + 'Speaker');
+            const deviceId = speakerSelect.value;
+
+            if (!text || text.includes('translation will appear here') || text.includes('Translation failed')) {
+                alert('No valid translation available for ' + language);
+                return;
+            }
+
+            if (!deviceId || deviceId === '') {
+                alert('Please select a speaker for ' + language);
+                return;
+            }
+
+            try {
+                // Get language code for TTS
+                const languageCodes = {
+                    'korean': 'ko',
+                    'chinese': 'zh',
+                    'japanese': 'ja'
+                };
+
+                const ttsLanguage = languageCodes[language] || 'en';
+
+                const response = await fetch('/tts/play', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        language: ttsLanguage,
+                        device_id: parseInt(deviceId)
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Speaker playback result:', result);
+                    
+                    // Update button state
+                    const button = document.getElementById(language + 'SpeakerPlay');
+                    button.textContent = '🔊 Playing...';
+                    button.disabled = true;
+                    
+                    // Reset button after a delay (approximate playback time)
+                    setTimeout(() => {
+                        button.textContent = '🔊 Play on Speaker';
+                        button.disabled = false;
+                    }, Math.max(text.length * 100, 3000)); // Estimate based on text length
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Speaker playback failed');
+                }
+            } catch (error) {
+                console.error('Error playing on speaker:', error);
+                alert('Failed to play on speaker: ' + error.message);
+            }
+        }
+
+        // Auto-play on configured speakers when translations are ready
+        async function autoPlayOnSpeakers() {
+            // Check if auto-play is enabled
+            const autoPlayEnabled = document.getElementById('autoPlayEnabled').checked;
+            if (!autoPlayEnabled) {
+                console.log('Auto-play is disabled');
+                return;
+            }
+
+            const deviceMappings = {};
+            const translations = {};
+
+            // Get current translations
+            const koreanText = document.getElementById('koreanText').textContent;
+            const chineseText = document.getElementById('chineseText').textContent;
+
+            // Check which speakers are configured and have valid translations
+            const koreanSpeaker = document.getElementById('koreanSpeaker').value;
+            const chineseSpeaker = document.getElementById('chineseSpeaker').value;
+
+            // Auto-assign speakers if not configured (Korean to device 0, Chinese to device 1)
+            const koreanDevice = koreanSpeaker || (availableDevices.length > 0 ? availableDevices[0].index : null);
+            const chineseDevice = chineseSpeaker || (availableDevices.length > 1 ? availableDevices[1].index : null);
+
+            if (koreanDevice && koreanText && !koreanText.includes('translation will appear here') && !koreanText.includes('Translation failed')) {
+                deviceMappings['ko'] = parseInt(koreanDevice);
+                translations['ko'] = koreanText;
+            }
+
+            if (chineseDevice && chineseText && !chineseText.includes('translation will appear here') && !chineseText.includes('Translation failed')) {
+                deviceMappings['zh'] = parseInt(chineseDevice);
+                translations['zh'] = chineseText;
+            }
+
+            if (Object.keys(deviceMappings).length === 0) {
+                console.log('No speakers configured or translations available for auto-play');
+                return;
+            }
+
+            try {
+                console.log('Auto-playing on speakers:', deviceMappings);
+                const response = await fetch('/tts/play-multi', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        translations: translations,
+                        device_mapping: deviceMappings,
+                        languages: {
+                            'ko': 'ko',
+                            'zh': 'zh'
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Auto-playback result:', result);
+                    // Show a brief notification
+                    showNotification(`🔊 Playing on ${Object.keys(deviceMappings).length} speakers automatically`);
+                } else {
+                    const error = await response.json();
+                    console.error('Auto-playback failed:', error);
+                }
+            } catch (error) {
+                console.error('Error in auto-playback:', error);
+            }
+        }
+
+        // Show notification to user
+        function showNotification(message) {
+            // Create a temporary notification element
+            const notification = document.createElement('div');
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+                font-weight: 500;
+                animation: slideIn 0.3s ease;
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Play all translations on their assigned speakers
+        async function playAllOnSpeakers() {
+            const deviceMappings = {};
+            const translations = {};
+
+            // Get current translations
+            const koreanText = document.getElementById('koreanText').textContent;
+            const chineseText = document.getElementById('chineseText').textContent;
+            const japaneseText = document.getElementById('japaneseText').textContent;
+
+            // Check which speakers are configured and have valid translations
+            const koreanSpeaker = document.getElementById('koreanSpeaker').value;
+            const chineseSpeaker = document.getElementById('chineseSpeaker').value;
+            const japaneseSpeaker = document.getElementById('japaneseSpeaker').value;
+
+            if (koreanSpeaker && koreanText && !koreanText.includes('translation will appear here') && !koreanText.includes('Translation failed')) {
+                deviceMappings['ko'] = parseInt(koreanSpeaker);
+                translations['ko'] = koreanText;
+            }
+
+            if (chineseSpeaker && chineseText && !chineseText.includes('translation will appear here') && !chineseText.includes('Translation failed')) {
+                deviceMappings['zh'] = parseInt(chineseSpeaker);
+                translations['zh'] = chineseText;
+            }
+
+            if (japaneseSpeaker && japaneseText && !japaneseText.includes('translation will appear here') && !japaneseText.includes('Translation failed')) {
+                deviceMappings['ja'] = parseInt(japaneseSpeaker);
+                translations['ja'] = japaneseText;
+            }
+
+            if (Object.keys(deviceMappings).length === 0) {
+                alert('Please configure speakers and ensure translations are available.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/tts/play-multi', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        translations: translations,
+                        device_mapping: deviceMappings,
+                        languages: {
+                            'ko': 'ko',
+                            'zh': 'zh',
+                            'ja': 'ja'
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Multi-speaker playback result:', result);
+                    alert(`Playing on ${Object.keys(deviceMappings).length} speakers.`);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Multi-speaker playback failed');
+                }
+            } catch (error) {
+                console.error('Error playing on multiple speakers:', error);
+                alert('Failed to play on speakers: ' + error.message);
+            }
+        }
+
+        // Refresh devices list
+        async function refreshDevices() {
+            const devicesList = document.getElementById('devicesList');
+            if (devicesList) {
+                devicesList.innerHTML = '<div class="loading-devices">🔄 Refreshing devices...</div>';
+            }
+            await loadAudioDevices();
+        }
+
+        // Update device status in real-time
+        function updateDeviceStatus(deviceId, status) {
+            const deviceItem = document.querySelector(`[data-device-id="${deviceId}"]`);
+            if (deviceItem) {
+                const statusIndicator = deviceItem.querySelector('.status-indicator');
+                const statusText = deviceItem.querySelector('.status-text');
+                
+                if (statusIndicator && statusText) {
+                    statusIndicator.className = `status-indicator ${status}`;
+                    statusText.textContent = status;
+                }
+            }
+        }
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             initializeStatus();
+            loadAudioDevices();
+            
+            // Add event listeners for source language changes
+            const sourceLanguageRadios = document.querySelectorAll('input[name="sourceLanguage"]');
+            sourceLanguageRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    console.log('Source language changed to:', this.value);
+                    updateTranslationCardLabels();
+                });
+            });
+
+            // Add refresh button functionality
+            const refreshBtn = document.createElement('button');
+            refreshBtn.textContent = '🔄 Refresh Devices';
+            refreshBtn.className = 'test-speakers-btn';
+            refreshBtn.style.marginLeft = '10px';
+            refreshBtn.onclick = refreshDevices;
+            
+            const audioControls = document.querySelector('.audio-controls');
+            if (audioControls) {
+                audioControls.appendChild(refreshBtn);
+            }
         });
+
+        // Update translation card labels based on source language
+        function updateTranslationCardLabels() {
+            const sourceLanguage = getSelectedSourceLanguage();
+            console.log('Updating labels for source language:', sourceLanguage);
+            
+            if (sourceLanguage === 'ko') {
+                // Korean source: show English, Chinese, Japanese
+                const koreanCard = document.querySelector('.translation-card:nth-child(1)');
+                koreanCard.querySelector('.language-name').textContent = 'English';
+                koreanCard.querySelector('.language-flag').textContent = '🇺🇸';
+                koreanCard.querySelector('.translation-text').textContent = 'English translation will appear here...';
+                
+                const chineseCard = document.querySelector('.translation-card:nth-child(2)');
+                chineseCard.querySelector('.language-name').textContent = 'Chinese';
+                chineseCard.querySelector('.language-flag').textContent = '🇨🇳';
+                chineseCard.querySelector('.translation-text').textContent = 'Chinese translation will appear here...';
+                
+                const japaneseCard = document.querySelector('.translation-card:nth-child(3)');
+                japaneseCard.querySelector('.language-name').textContent = 'Japanese';
+                japaneseCard.querySelector('.language-flag').textContent = '🇯🇵';
+                japaneseCard.querySelector('.translation-text').textContent = 'Japanese translation will appear here...';
+            } else {
+                // English source: show Korean, Chinese, Japanese
+                const koreanCard = document.querySelector('.translation-card:nth-child(1)');
+                koreanCard.querySelector('.language-name').textContent = 'Korean';
+                koreanCard.querySelector('.language-flag').textContent = '🇰🇷';
+                koreanCard.querySelector('.translation-text').textContent = 'Korean translation will appear here...';
+                
+                const chineseCard = document.querySelector('.translation-card:nth-child(2)');
+                chineseCard.querySelector('.language-name').textContent = 'Chinese';
+                chineseCard.querySelector('.language-flag').textContent = '🇨🇳';
+                chineseCard.querySelector('.translation-text').textContent = 'Chinese translation will appear here...';
+                
+                const japaneseCard = document.querySelector('.translation-card:nth-child(3)');
+                japaneseCard.querySelector('.language-name').textContent = 'Japanese';
+                japaneseCard.querySelector('.language-flag').textContent = '🇯🇵';
+                japaneseCard.querySelector('.translation-text').textContent = 'Japanese translation will appear here...';
+            }
+        }
     </script>
 </body>
 </html>

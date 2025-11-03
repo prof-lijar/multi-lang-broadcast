@@ -1,258 +1,321 @@
-#!/usr/bin/env python3
 """
-Simplified Text-to-Speech Service
-Provides basic text-to-speech functionality without external dependencies
-
-This is a simplified version that simulates TTS functionality
-for demonstration purposes without requiring Google Cloud setup.
+Text-to-Speech Service using Google TTS
+Handles audio generation for translated texts
 """
 
 import os
 import tempfile
+import threading
 import time
-import logging
-from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Optional, List
+from gtts import gTTS
+import pygame
+import soundfile as sf
+import numpy as np
 from datetime import datetime
-
-# Logger
-logger = logging.getLogger(__name__)
-
-
-def check_authentication():
-    """Check if TTS service is ready (simplified version)"""
-    print("TTS service ready (simplified mode)")
-    return True
-
-
-def setup_authentication():
-    """Guide user through simplified TTS setup"""
-    print("\n" + "=" * 60)
-    print("Simplified TTS Service")
-    print("=" * 60)
-    print("This is a simplified TTS service that simulates functionality")
-    print("without requiring external dependencies or API keys.")
-    print("=" * 60)
+import uuid
 
 
 class TTSService:
-    """Simplified Text-to-Speech Service"""
+    """Text-to-Speech service using Google TTS"""
     
-    def __init__(self, language_code: str = 'en-US', voice_gender: str = 'NEUTRAL'):
-        """
-        Initialize Simplified TTS Service
+    def __init__(self):
+        self.is_initialized = False
+        self.audio_cache = {}  # Cache for generated audio files
+        self.active_playbacks = {}  # Track active playback sessions
+        self.cleanup_thread = None
+        self._initialize_pygame()
         
-        Args:
-            language_code: Language code for TTS (default: 'en-US' for English US)
-            voice_gender: Voice gender - 'NEUTRAL', 'MALE', or 'FEMALE' (default: 'NEUTRAL')
-        """
-        self.language_code = language_code
-        self.voice_gender = voice_gender
-        self.temp_dir = tempfile.gettempdir()
-        self.is_initialized = True
-        self.is_playing = False
-        self.stats = {
-            'total_requests': 0,
-            'successful_requests': 0,
-            'failed_requests': 0,
-            'total_characters': 0,
-            'last_request_time': None
-        }
-        
-        logger.info(f"Simplified TTS Service initialized - Language: {language_code}, Voice Gender: {voice_gender}")
-    
-    def text_to_speech(self, text: str, filename: Optional[str] = None) -> str:
-        """
-        Convert text to speech and save as audio file (simplified version)
-        
-        Args:
-            text: Text to convert to speech
-            filename: Optional filename for the audio file
-            
-        Returns:
-            Path to the generated audio file
-        """
-        if not self.is_initialized:
-            raise RuntimeError("TTS Service not initialized")
-        
-        # Update statistics
-        self.stats['total_requests'] += 1
-        self.stats['total_characters'] += len(text)
-        self.stats['last_request_time'] = datetime.utcnow().isoformat()
-        
+    def _initialize_pygame(self):
+        """Initialize pygame mixer for audio playback"""
         try:
-            logger.info(f"Converting text to speech: '{text[:50]}...'")
+            pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+            pygame.mixer.init()
+            self.is_initialized = True
+            print("✅ TTS Service initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize TTS service: {e}")
+            self.is_initialized = False
+    
+    def generate_audio(self, text: str, language: str = "en", slow: bool = False) -> Dict[str, Any]:
+        """Generate audio from text using Google TTS"""
+        try:
+            if not self.is_initialized:
+                return {
+                    "success": False,
+                    "error": "TTS service not initialized"
+                }
             
-            # Generate filename if not provided
-            if filename is None:
-                timestamp = int(time.time())
-                filename = f"tts_output_{timestamp}.wav"
+            # Create cache key
+            cache_key = f"{text}_{language}_{slow}"
             
-            # Save to temporary directory
-            filepath = os.path.join(self.temp_dir, filename)
+            # Check cache first
+            if cache_key in self.audio_cache:
+                cached_file = self.audio_cache[cache_key]
+                if os.path.exists(cached_file):
+                    return {
+                        "success": True,
+                        "audio_file": cached_file,
+                        "cached": True
+                    }
             
-            # Create a simple audio file (simplified)
-            with open(filepath, "wb") as out:
-                # Write a minimal WAV header for demo purposes
-                out.write(b'RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x08\x00\x00')
-                # Add some silence data
-                out.write(b'\x00' * 2048)
+            # Generate new audio
+            tts = gTTS(text=text, lang=language, slow=slow)
             
-            self.stats['successful_requests'] += 1
-            logger.info(f"Audio saved to: {filepath}")
-            return filepath
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+                tts.save(tmp_file.name)
+                audio_file = tmp_file.name
+            
+            # Cache the file
+            self.audio_cache[cache_key] = audio_file
+            
+            return {
+                "success": True,
+                "audio_file": audio_file,
+                "cached": False,
+                "text": text,
+                "language": language
+            }
             
         except Exception as e:
-            self.stats['failed_requests'] += 1
-            logger.error(f"Error converting text to speech: {e}")
-            raise
+            return {
+                "success": False,
+                "error": f"Failed to generate audio: {str(e)}"
+            }
     
-    def play_audio(self, filepath: str) -> None:
-        """
-        Play audio file (simplified version)
-        
-        Args:
-            filepath: Path to the audio file to play
-        """
+    def play_audio(self, audio_file: str, device_id: Optional[int] = None) -> Dict[str, Any]:
+        """Play audio file"""
         try:
-            logger.info(f"Playing audio: {filepath}")
-            self.is_playing = True
+            if not os.path.exists(audio_file):
+                return {
+                    "success": False,
+                    "error": "Audio file not found"
+                }
             
-            # Simulate audio playback
-            time.sleep(2.0)  # Simulate playback time
+            # Generate playback ID
+            playback_id = str(uuid.uuid4())
             
-            logger.info("Audio playback completed")
+            # Start playback in separate thread
+            playback_thread = threading.Thread(
+                target=self._play_audio_thread,
+                args=(audio_file, playback_id, device_id)
+            )
+            playback_thread.daemon = True
+            playback_thread.start()
+            
+            # Store playback info
+            self.active_playbacks[playback_id] = {
+                "audio_file": audio_file,
+                "start_time": time.time(),
+                "device_id": device_id,
+                "status": "playing"
+            }
+            
+            print(f"🎵 TTS playback started on device {device_id}: {audio_file}")
+            
+            return {
+                "success": True,
+                "playback_id": playback_id,
+                "message": "Audio playback started"
+            }
             
         except Exception as e:
-            logger.error(f"Error playing audio: {e}")
-            raise
-        finally:
-            self.is_playing = False
+            return {
+                "success": False,
+                "error": f"Failed to play audio: {str(e)}"
+            }
     
-    def speak(self, text: str, cleanup: bool = True) -> None:
-        """
-        Convert text to speech and play it immediately (simplified version)
-        
-        Args:
-            text: Text to speak
-            cleanup: Whether to delete the temporary audio file after playing
-        """
+    def _play_audio_thread(self, audio_file: str, playback_id: str, device_id: Optional[int] = None):
+        """Play audio in separate thread"""
         try:
-            # Convert text to speech
-            audio_file = self.text_to_speech(text)
+            import sounddevice as sd
+            import soundfile as sf
             
-            # Play the audio
-            self.play_audio(audio_file)
+            # Load audio file
+            audio_data, sample_rate = sf.read(audio_file)
             
-            # Clean up temporary file if requested
-            if cleanup:
-                try:
-                    os.remove(audio_file)
-                    logger.info(f"Cleaned up temporary file: {audio_file}")
-                except OSError as e:
-                    logger.warning(f"Could not delete temporary file {audio_file}: {e}")
-                    
+            # Ensure stereo format
+            if len(audio_data.shape) == 1:
+                audio_data = np.column_stack((audio_data, audio_data))
+            elif audio_data.shape[1] == 1:
+                audio_data = np.repeat(audio_data, 2, axis=1)
+            
+            # Play on specific device if provided
+            if device_id is not None:
+                print(f"🔊 TTS playing on device {device_id}")
+                sd.play(audio_data, samplerate=sample_rate, device=device_id)
+                sd.wait()
+            else:
+                # Use default device
+                print(f"🔊 TTS playing on default device")
+                sd.play(audio_data, samplerate=sample_rate)
+                sd.wait()
+            
+            # Update status
+            if playback_id in self.active_playbacks:
+                self.active_playbacks[playback_id]["status"] = "completed"
+                self.active_playbacks[playback_id]["end_time"] = time.time()
+            
         except Exception as e:
-            logger.error(f"Error in speak method: {e}")
-            raise
+            print(f"❌ TTS playback error: {e}")
+            if playback_id in self.active_playbacks:
+                self.active_playbacks[playback_id]["status"] = "error"
+                self.active_playbacks[playback_id]["error"] = str(e)
     
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get service statistics"""
-        return {
-            'is_initialized': self.is_initialized,
-            'language_code': self.language_code,
-            'voice_gender': self.voice_gender,
-            'is_playing': self.is_playing,
-            'stats': self.stats.copy()
-        }
-    
-    def reset_statistics(self) -> None:
-        """Reset service statistics"""
-        self.stats = {
-            'total_requests': 0,
-            'successful_requests': 0,
-            'failed_requests': 0,
-            'total_characters': 0,
-            'last_request_time': None
-        }
-        logger.info("TTS service statistics reset")
-    
-    def set_language(self, language_code: str) -> None:
-        """Set the language code for TTS"""
-        self.language_code = language_code
-        logger.info(f"TTS language set to: {language_code}")
-    
-    def set_voice_gender(self, voice_gender: str) -> None:
-        """Set the voice gender for TTS"""
-        self.voice_gender = voice_gender
-        logger.info(f"TTS voice gender set to: {voice_gender}")
-    
-    def cleanup(self) -> None:
-        """Clean up resources"""
+    def stop_playback(self, playback_id: Optional[str] = None) -> Dict[str, Any]:
+        """Stop audio playback"""
         try:
-            self.is_playing = False
-            logger.info("TTS Service cleanup completed")
+            if playback_id:
+                # Stop specific playback
+                if playback_id in self.active_playbacks:
+                    pygame.mixer.music.stop()
+                    self.active_playbacks[playback_id]["status"] = "stopped"
+                    return {
+                        "success": True,
+                        "message": f"Playback {playback_id} stopped"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Playback not found"
+                    }
+            else:
+                # Stop all playback
+                pygame.mixer.music.stop()
+                for pid in self.active_playbacks:
+                    self.active_playbacks[pid]["status"] = "stopped"
+                
+                return {
+                    "success": True,
+                    "message": "All playback stopped"
+                }
+                
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to stop playback: {str(e)}"
+            }
+    
+    def get_playback_status(self) -> Dict[str, Any]:
+        """Get current playback status"""
+        try:
+            current_time = time.time()
+            active_count = 0
+            completed_count = 0
+            
+            for playback_id, info in self.active_playbacks.items():
+                if info["status"] == "playing":
+                    active_count += 1
+                elif info["status"] == "completed":
+                    completed_count += 1
+                
+                # Clean up old completed playbacks (older than 5 minutes)
+                if (info["status"] in ["completed", "stopped", "error"] and 
+                    current_time - info.get("end_time", info["start_time"]) > 300):
+                    try:
+                        if os.path.exists(info["audio_file"]):
+                            os.unlink(info["audio_file"])
+                    except:
+                        pass
+                    del self.active_playbacks[playback_id]
+            
+            return {
+                "success": True,
+                "active_playbacks": active_count,
+                "completed_playbacks": completed_count,
+                "total_playbacks": len(self.active_playbacks),
+                "is_playing": pygame.mixer.music.get_busy()
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get playback status: {str(e)}"
+            }
+    
+    def generate_multiple_audio(self, translations: Dict[str, str], languages: Dict[str, str]) -> Dict[str, Any]:
+        """Generate audio for multiple translations"""
+        try:
+            results = {}
+            audio_files = {}
+            
+            for lang_code, text in translations.items():
+                if not text or text.strip() == "":
+                    continue
+                
+                # Get language code for TTS
+                tts_lang = languages.get(lang_code, lang_code)
+                
+                # Generate audio
+                audio_result = self.generate_audio(text, tts_lang)
+                
+                if audio_result["success"]:
+                    results[lang_code] = {
+                        "success": True,
+                        "audio_file": audio_result["audio_file"],
+                        "text": text,
+                        "language": tts_lang
+                    }
+                    audio_files[lang_code] = audio_result["audio_file"]
+                else:
+                    results[lang_code] = {
+                        "success": False,
+                        "error": audio_result["error"]
+                    }
+            
+            return {
+                "success": True,
+                "results": results,
+                "audio_files": audio_files
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to generate multiple audio: {str(e)}"
+            }
+    
+    def cleanup_cache(self):
+        """Clean up old cached audio files"""
+        try:
+            current_time = time.time()
+            to_remove = []
+            
+            for cache_key, file_path in self.audio_cache.items():
+                if os.path.exists(file_path):
+                    file_age = current_time - os.path.getmtime(file_path)
+                    if file_age > 3600:  # Remove files older than 1 hour
+                        to_remove.append(cache_key)
+                        try:
+                            os.unlink(file_path)
+                        except:
+                            pass
+                else:
+                    to_remove.append(cache_key)
+            
+            for key in to_remove:
+                del self.audio_cache[key]
+                
+        except Exception as e:
+            print(f"Error cleaning up TTS cache: {e}")
 
 
 # Global TTS service instance
 _tts_service = None
 
 def get_tts_service() -> TTSService:
-    """Get the global TTS service instance"""
+    """Get global TTS service instance"""
     global _tts_service
     if _tts_service is None:
         _tts_service = TTSService()
     return _tts_service
 
-def initialize_tts_service(language_code: str = 'en-US', voice_gender: str = 'NEUTRAL') -> bool:
-    """Initialize the TTS service"""
-    global _tts_service
+def initialize_tts_service() -> bool:
+    """Initialize TTS service"""
     try:
-        _tts_service = TTSService(language_code=language_code, voice_gender=voice_gender)
-        return True
+        service = get_tts_service()
+        return service.is_initialized
     except Exception as e:
-        logger.error(f"Failed to initialize TTS service: {e}")
+        print(f"Failed to initialize TTS service: {e}")
         return False
-
-def main():
-    """Main function to demonstrate simplified TTS functionality"""
-    print("=" * 60)
-    print("Simplified TTS Demo")
-    print("=" * 60)
-    
-    # Check authentication first
-    if not check_authentication():
-        setup_authentication()
-        return
-    
-    # Initialize simplified TTS service
-    tts_service = TTSService(language_code='en-US', voice_gender='NEUTRAL')
-    
-    try:
-        # The specific message requested
-        message = "hello, im LI JAR. I Love AI"
-        
-        print(f"\nSpeaking message: '{message}'")
-        print("-" * 40)
-        
-        # Convert and play the message
-        tts_service.speak(message)
-        
-        print("\n" + "=" * 60)
-        print("TTS Demo completed successfully!")
-        print("=" * 60)
-        
-    except KeyboardInterrupt:
-        print("\nDemo interrupted by user")
-    except Exception as e:
-        print(f"\nDemo failed with error: {e}")
-        print("\nThis is a simplified TTS service for demonstration purposes.")
-    finally:
-        # Clean up resources
-        tts_service.cleanup()
-
-
-if __name__ == "__main__":
-    main()
