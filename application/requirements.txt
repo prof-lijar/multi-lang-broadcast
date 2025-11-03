@@ -18,7 +18,7 @@ google-auth-httplib2==0.1.1
 google-cloud-speech==2.21.0
 
 # Audio processing
-pyaudio==0.2.11
+sounddevice==0.4.6
 numpy==1.24.3
 
 # Performance monitoring
