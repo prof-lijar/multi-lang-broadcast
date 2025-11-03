@@ -206,48 +206,6 @@ async def get_audio_output_devices():
             detail=f"Failed to retrieve audio devices: {str(e)}"
         )
 
-@app.get("/audio-output-devices/{card_id}", response_model=Dict[str, Any])
-async def get_audio_device_details(card_id: int):
-    """Get detailed information about a specific audio device"""
-    try:
-        audio_service = get_audio_service()
-        devices = audio_service.get_devices()
-        
-        # Find the requested device
-        device = None
-        for d in devices:
-            if d.card_id == card_id:
-                device = d
-                break
-        
-        if not device:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Audio device with card ID {card_id} not found"
-            )
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "data": {
-                "card_id": device.card_id,
-                "device_id": device.device_id,
-                "name": device.name,
-                "description": device.description,
-                "device_type": device.device_type.value,
-                "is_active": device.is_active,
-                "volume": device.volume,
-                "is_muted": device.is_muted
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to retrieve device details: {str(e)}"
-        )
 
 # Translation endpoints
 @app.post("/translate", response_model=Dict[str, Any])
@@ -409,182 +367,72 @@ async def get_translation_status():
             detail=f"Failed to get translation status: {str(e)}"
         )
 
-@app.post("/translate/reset-stats")
-async def reset_translation_statistics():
-    """Reset translation service statistics"""
-    try:
-        translation_service = get_translation_service()
-        translation_service.reset_statistics()
-        
-        return {
-            "status": "success",
-            "message": "Translation statistics reset",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset statistics: {str(e)}"
-        )
 
-# STT endpoints
-@app.post("/stt/transcribe-file", response_model=Dict[str, Any])
-async def transcribe_audio_file(request: STTFileRequest):
-    """Transcribe audio from base64 encoded audio data"""
+@app.post("/stt/restart-record")
+async def start_record_audio():
+    """Start recording audio"""
     try:
         stt_service = get_stt_service()
+        success = stt_service.start_record()
         
-        if not stt_service.is_initialized:
-            raise HTTPException(
-                status_code=503,
-                detail="STT service not initialized"
-            )
-        
-        # Decode base64 audio data
-        try:
-            audio_data = base64.b64decode(request.audio_data)
-        except Exception as e:
+        if success:
+            return {
+                "status": "success",
+                "message": "Audio recording started",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid base64 audio data: {str(e)}"
+                detail="Failed to start recording. Recording may already be in progress."
             )
-        
-        result = await stt_service.transcribe_audio_file(
-            audio_data=audio_data,
-            language_code=request.language_code
-        )
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "data": result
-        }
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Audio transcription failed: {str(e)}"
+            detail=f"Failed to start recording: {str(e)}"
         )
 
-@app.get("/stt/stream")
-async def stream_speech_to_text(language_code: str = "en-US"):
-    """Stream real-time speech-to-text results"""
+@app.post("/stt/end-record", response_model=Dict[str, Any])
+async def end_record_and_transcribe(language_code: Optional[str] = None):
+    """Stop recording audio and transcribe the recorded audio"""
     try:
         stt_service = get_stt_service()
         
-        if not stt_service.is_initialized:
+        # Stop recording and get audio data
+        audio_data = stt_service.end_record()
+        
+        if audio_data is None:
             raise HTTPException(
-                status_code=503,
-                detail="STT service not initialized"
+                status_code=400,
+                detail="No recording was active or no audio data was captured"
             )
         
-        async def generate_transcriptions():
-            try:
-                print(f"🚀 Starting transcription stream for language: {language_code}")
-                async for result in stt_service.start_streaming(language_code):
-                    print(f"📤 Yielding result to client: {result}")
-                    yield f"data: {json.dumps(result)}\n\n"
-            except Exception as e:
-                print(f"❌ Error in transcription stream: {e}")
-                yield f"data: {json.dumps({'error': str(e), 'type': 'error'})}\n\n"
+        # Transcribe the audio
+        result = stt_service.transcribe(audio_data, language_code=language_code)
         
-        return StreamingResponse(
-            generate_transcriptions(),
-            media_type="text/plain",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "*"
-            }
-        )
+        if result["status"] == "error":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Transcription failed: {result.get('error', 'Unknown error')}"
+            )
+        
+        return {
+            "status": "success",
+            "transcript": result.get("transcript", ""),
+            "confidence": result.get("confidence", 0.0),
+            "language": result.get("language", language_code or "en-US"),
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Speech-to-text streaming failed: {str(e)}"
-        )
-
-@app.post("/stt/stop")
-async def stop_speech_to_text():
-    """Stop the current speech-to-text streaming"""
-    try:
-        stt_service = get_stt_service()
-        stt_service.stop_streaming()
-        
-        return {
-            "status": "success",
-            "message": "Speech-to-text streaming stopped",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to stop speech-to-text: {str(e)}"
-        )
-
-@app.post("/stt/restart")
-async def restart_speech_to_text():
-    """Restart the speech-to-text streaming if it gets stuck"""
-    try:
-        stt_service = get_stt_service()
-        stt_service.restart_streaming()
-        
-        return {
-            "status": "success",
-            "message": "Speech-to-text streaming restarted",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to restart speech-to-text: {str(e)}"
-        )
-
-@app.get("/stt/status", response_model=Dict[str, Any])
-async def get_stt_status():
-    """Get STT service status and statistics"""
-    try:
-        stt_service = get_stt_service()
-        stats = stt_service.get_statistics()
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "data": stats
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get STT status: {str(e)}"
-        )
-
-@app.post("/stt/reset-stats")
-async def reset_stt_statistics():
-    """Reset STT service statistics"""
-    try:
-        stt_service = get_stt_service()
-        stt_service.reset_statistics()
-        
-        return {
-            "status": "success",
-            "message": "STT statistics reset",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset STT statistics: {str(e)}"
+            detail=f"Failed to stop recording and transcribe: {str(e)}"
         )
 
 @app.get("/stt/languages", response_model=Dict[str, Any])
