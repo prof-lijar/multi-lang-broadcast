@@ -19,7 +19,7 @@ google-cloud-speech==2.21.0
 
 # Audio processing
 pyaudio==0.2.11
-numpy==1.24.3
+# numpy - already installed from root requirements.txt
 
 # Performance monitoring
 psutil==5.9.6

@@ -435,9 +435,20 @@
                 <div class="language-buttons">
                     <button class="lang-btn active" data-lang="en-US">English</button>
                     <button class="lang-btn" data-lang="ko-KR">한국어</button>
-                    <button class="lang-btn" data-lang="zh-CN">中文</button>
+                    <button class="lang-btn" data-lang="zh-CN">中문</button>
                     <button class="lang-btn" data-lang="ja-JP">日本語</button>
                 </div>
+            </div>
+            
+            <div class="audio-input-selector" style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; color: #666; font-weight: 500;">Audio Input Device:</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="audioInputDevice" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background: white; cursor: pointer;">
+                        <option value="">Default Device</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="refreshInputDevices()" style="padding: 10px 15px;">🔄 Refresh</button>
+                </div>
+                <div id="deviceChannelInfo" style="margin-top: 8px; font-size: 12px; color: #666;"></div>
             </div>
             
             <div class="controls">
@@ -600,6 +611,8 @@
         let translationEnabled = false;
         let lastTranslatedText = '';
         let audioDevices = [];
+        let audioInputDevices = [];
+        let selectedInputDevice = null;
         let speakerAssignments = {
             speaker1: { language: 'en', device: null },
             speaker2: { language: 'ko', device: null }
@@ -909,6 +922,82 @@
         function testTranslation() {
             console.log('Testing translation with sample text');
             translateText('Hello, this is a test translation');
+        }
+        
+        // Audio Input Device Functions
+        async function refreshInputDevices() {
+            try {
+                console.log('Fetching audio input devices...');
+                const response = await fetch('/stt/input-devices');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    audioInputDevices = result.data.devices;
+                    populateInputDeviceSelector();
+                    console.log('Audio input devices loaded:', audioInputDevices);
+                } else {
+                    throw new Error('Failed to load audio input devices');
+                }
+            } catch (error) {
+                console.error('Error loading input devices:', error);
+                alert('Error loading audio input devices: ' + error.message);
+            }
+        }
+        
+        function populateInputDeviceSelector() {
+            const select = document.getElementById('audioInputDevice');
+            const channelInfo = document.getElementById('deviceChannelInfo');
+            
+            // Clear existing options except default
+            select.innerHTML = '<option value="">Default Device</option>';
+            
+            // Add device options
+            audioInputDevices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.index;
+                option.textContent = `${device.name} (${device.max_input_channels} channels)`;
+                option.dataset.channels = device.max_input_channels;
+                option.dataset.sampleRate = device.default_sample_rate;
+                select.appendChild(option);
+            });
+            
+            // Add change event listener
+            select.onchange = async function() {
+                const selectedOption = select.options[select.selectedIndex];
+                const deviceIndex = select.value ? parseInt(select.value) : null;
+                const channels = selectedOption.dataset.channels ? parseInt(selectedOption.dataset.channels) : 1;
+                const sampleRate = selectedOption.dataset.sampleRate;
+                
+                if (select.value === '') {
+                    channelInfo.textContent = 'Using system default input device';
+                    selectedInputDevice = null;
+                } else {
+                    channelInfo.textContent = `Device ${deviceIndex}: ${channels} channel(s), ${sampleRate} Hz sample rate`;
+                    selectedInputDevice = { index: deviceIndex, channels: channels };
+                }
+                
+                // Send to backend
+                try {
+                    const response = await fetch(`/stt/set-input-device?device_index=${deviceIndex !== null ? deviceIndex : ''}&channels=${channels}`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        console.log('Input device set successfully:', result.data);
+                    } else {
+                        throw new Error('Failed to set input device');
+                    }
+                } catch (error) {
+                    console.error('Error setting input device:', error);
+                    alert('Error setting input device: ' + error.message);
+                }
+            };
+            
+            // Set initial info if default is selected
+            if (select.value === '') {
+                channelInfo.textContent = 'Using system default input device';
+            }
         }
         
         // Audio Output Functions
@@ -1317,6 +1406,7 @@
         // Load audio devices on page load
         document.addEventListener('DOMContentLoaded', function() {
             refreshAudioDevices();
+            refreshInputDevices();
         });
         
         // Prevent accidental page refresh during recording

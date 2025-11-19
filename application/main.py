@@ -5,7 +5,7 @@ Main application entry point with health endpoint
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from datetime import datetime
@@ -20,6 +20,7 @@ import time
 from typing import Dict, Any, List, Optional
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from service.output_audio import get_audio_service, initialize_audio_service
 from service.translate import get_translation_service, initialize_translation_service
 from service.stt import get_stt_service, initialize_stt_service
@@ -91,31 +92,11 @@ class TTSFileRequest(BaseModel):
     voice_gender: Optional[str] = "NEUTRAL"
     filename: Optional[str] = None
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Multi-Language Broadcast API",
-    description="API for live translation and multi-language broadcasting",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount static files
-app.mount("/static", StaticFiles(directory="."), name="static")
-
-# Initialize services on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on application startup"""
+# Lifespan event handler for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize services on application startup and cleanup on shutdown"""
+    # Startup
     try:
         # Initialize audio service
         audio_service = get_audio_service()
@@ -150,10 +131,57 @@ async def startup_event():
             
     except Exception as e:
         print(f"❌ Error initializing services: {e}")
+    
+    yield
+    
+    # Shutdown (cleanup if needed)
+    # Add any cleanup code here if needed in the future
 
-@app.get("/", response_model=Dict[str, Any])
+# Initialize FastAPI app
+app = FastAPI(
+    title="Multi-Language Broadcast API",
+    description="API for live translation and multi-language broadcasting",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure this properly for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files (serve app_ui.html and other files from the application directory)
+import os
+static_dir = os.path.dirname(os.path.abspath(__file__))
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+@app.get("/")
 async def root():
-    """Root endpoint with basic API information"""
+    """Serve the main UI"""
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_ui.html")
+    return FileResponse(html_path)
+
+@app.get("/app_ui.html")
+async def app_ui():
+    """Serve the main UI at /app_ui.html"""
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_ui.html")
+    return FileResponse(html_path)
+
+@app.post("/app_ui.html")
+async def app_ui_post():
+    """Handle POST requests to /app_ui.html (treat as GET)"""
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_ui.html")
+    return FileResponse(html_path)
+
+@app.get("/api", response_model=Dict[str, Any])
+async def api_info():
+    """API information endpoint"""
     return {
         "message": "Multi-Language Broadcast API",
         "version": "1.0.0",
@@ -262,6 +290,21 @@ async def translate_text(request: TranslationRequest):
                 detail="Translation service not initialized"
             )
         
+        # Validate text is not empty
+        if not request.text or not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty"
+            )
+        
+        # Validate mime_type if provided
+        valid_mime_types = ["text/plain", "text/html", None]
+        if request.mime_type and request.mime_type not in valid_mime_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid mime_type. Must be one of: text/plain, text/html, or omitted"
+            )
+        
         result = await translation_service.translate_text(
             text=request.text,
             source_language=request.source_language,
@@ -294,6 +337,21 @@ async def translate_stream(request: StreamingTranslationRequest):
             raise HTTPException(
                 status_code=503,
                 detail="Translation service not initialized"
+            )
+        
+        # Validate text is not empty
+        if not request.text or not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty"
+            )
+        
+        # Validate mime_type if provided
+        valid_mime_types = ["text/plain", "text/html", None]
+        if request.mime_type and request.mime_type not in valid_mime_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid mime_type. Must be one of: text/plain, text/html, or omitted"
             )
         
         # Create a simple async generator for the text
@@ -372,6 +430,13 @@ async def detect_language(request: LanguageDetectionRequest):
             raise HTTPException(
                 status_code=503,
                 detail="Translation service not initialized"
+            )
+        
+        # Validate text is not empty
+        if not request.text or not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty"
             )
         
         result = translation_service.detect_language(request.text)
@@ -467,6 +532,69 @@ async def transcribe_audio_file(request: STTFileRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Audio transcription failed: {str(e)}"
+        )
+
+@app.get("/stt/input-devices", response_model=Dict[str, Any])
+async def get_audio_input_devices():
+    """Get list of available audio input devices with their channel information"""
+    try:
+        stt_service = get_stt_service()
+        
+        if not stt_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="STT service not initialized"
+            )
+        
+        devices = stt_service.get_input_devices()
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "devices": devices,
+                "count": len(devices)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get audio input devices: {str(e)}"
+        )
+
+@app.post("/stt/set-input-device", response_model=Dict[str, Any])
+async def set_audio_input_device(device_index: Optional[int] = None, channels: int = 1):
+    """Set the audio input device and channel configuration"""
+    try:
+        stt_service = get_stt_service()
+        
+        if not stt_service.is_initialized:
+            raise HTTPException(
+                status_code=503,
+                detail="STT service not initialized"
+            )
+        
+        stt_service.set_input_device(device_index, channels)
+        
+        return {
+            "status": "success",
+            "message": "Input device configuration updated",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "device_index": device_index,
+                "channels": channels
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to set input device: {str(e)}"
         )
 
 @app.get("/stt/stream")

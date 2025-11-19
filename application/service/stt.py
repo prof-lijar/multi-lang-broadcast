@@ -55,6 +55,7 @@ class STTService:
         # Audio configuration
         self.audio_format = pyaudio.paInt16
         self.channels = 1  # Mono audio for better performance
+        self.input_device_index = None  # Use default input device if None
         
         # Initialize Google Speech client
         self._init_speech_client(credentials_path)
@@ -317,15 +318,22 @@ class STTService:
         
         # Initialize audio stream
         try:
-            self.stream = self.audio.open(
-                format=self.audio_format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                frames_per_buffer=self.chunk_size,
-                stream_callback=self._audio_callback,
-                start=False
-            )
+            stream_params = {
+                'format': self.audio_format,
+                'channels': self.channels,
+                'rate': self.sample_rate,
+                'input': True,
+                'frames_per_buffer': self.chunk_size,
+                'stream_callback': self._audio_callback,
+                'start': False
+            }
+            
+            # Add input_device_index if specified
+            if self.input_device_index is not None:
+                stream_params['input_device_index'] = self.input_device_index
+                print(f"✅ Using input device index: {self.input_device_index}")
+            
+            self.stream = self.audio.open(**stream_params)
             print("✅ Audio stream initialized successfully")
         except Exception as e:
             print(f"❌ Failed to initialize audio stream: {e}")
@@ -636,6 +644,37 @@ class STTService:
         self.error_count = 0
         self.last_error = None
         self.start_time = None
+    
+    def set_input_device(self, device_index: Optional[int] = None, channels: int = 1):
+        """Set the input device and channel configuration."""
+        self.input_device_index = device_index
+        self.channels = channels
+        print(f"✓ Input device set to index: {device_index}, channels: {channels}")
+    
+    def get_input_devices(self) -> List[Dict[str, Any]]:
+        """Get list of available audio input devices with their properties."""
+        devices = []
+        
+        try:
+            for i in range(self.audio.get_device_count()):
+                device_info = self.audio.get_device_info_by_index(i)
+                
+                # Only include input devices (devices with input channels > 0)
+                if device_info.get('maxInputChannels', 0) > 0:
+                    devices.append({
+                        'index': i,
+                        'name': device_info.get('name', 'Unknown Device'),
+                        'max_input_channels': device_info.get('maxInputChannels', 0),
+                        'default_sample_rate': int(device_info.get('defaultSampleRate', 16000)),
+                        'host_api': device_info.get('hostApi', 0)
+                    })
+            
+            print(f"✓ Found {len(devices)} audio input devices")
+            return devices
+            
+        except Exception as e:
+            print(f"✗ Error getting input devices: {e}")
+            return []
 
 
 # Global service instance

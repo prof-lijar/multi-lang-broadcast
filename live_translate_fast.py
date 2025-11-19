@@ -7,7 +7,7 @@ import time
 import numpy as np
 import tempfile
 import os
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 import queue
 from concurrent.futures import ThreadPoolExecutor
 import io
@@ -19,7 +19,6 @@ class FastLiveTranslator:
     def __init__(self, source_lang="en", target_lang="ko", model_name="tiny"):
         # Use tiny model for faster processing
         self.model = whisper.load_model(model_name)
-        self.translator = Translator()
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.audio = pyaudio.PyAudio()
@@ -163,12 +162,8 @@ class FastLiveTranslator:
                 translated_text = self.translation_cache[original_text]
             else:
                 # Translate the text
-                translation = self.translator.translate(
-                    original_text, 
-                    src=self.source_lang, 
-                    dest=self.target_lang
-                )
-                translated_text = translation.text
+                translator = GoogleTranslator(source=self.source_lang, target=self.target_lang)
+                translated_text = translator.translate(original_text)
                 
                 # Cache the translation
                 self.translation_cache[original_text] = translated_text
