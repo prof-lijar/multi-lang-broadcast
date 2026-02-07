@@ -1,5 +1,5 @@
 """
-Live Translation Service using Google Cloud Translation API
+Live Translation Service using Google Gemini LLM
 Provides real-time translation capabilities for streaming text input
 """
 
@@ -7,13 +7,11 @@ import asyncio
 import logging
 import os
 import time
+import json
 from typing import Dict, List, Optional, AsyncGenerator, Any
 from datetime import datetime
-import json
 
-from google.cloud import translate
-from google.auth.exceptions import DefaultCredentialsError
-from google.api_core import exceptions as gcp_exceptions
+import google.generativeai as genai
 
 from config import get_settings
 
@@ -21,16 +19,71 @@ from config import get_settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Comprehensive language map for display names and supported languages
+SUPPORTED_LANGUAGES = [
+    {"code": "en", "name": "English"},
+    {"code": "es", "name": "Spanish"},
+    {"code": "fr", "name": "French"},
+    {"code": "de", "name": "German"},
+    {"code": "it", "name": "Italian"},
+    {"code": "pt", "name": "Portuguese"},
+    {"code": "ru", "name": "Russian"},
+    {"code": "ja", "name": "Japanese"},
+    {"code": "ko", "name": "Korean"},
+    {"code": "zh", "name": "Chinese (Simplified)"},
+    {"code": "zh-TW", "name": "Chinese (Traditional)"},
+    {"code": "ar", "name": "Arabic"},
+    {"code": "hi", "name": "Hindi"},
+    {"code": "th", "name": "Thai"},
+    {"code": "vi", "name": "Vietnamese"},
+    {"code": "my", "name": "Burmese"},
+    {"code": "km", "name": "Khmer"},
+    {"code": "nl", "name": "Dutch"},
+    {"code": "sv", "name": "Swedish"},
+    {"code": "no", "name": "Norwegian"},
+    {"code": "da", "name": "Danish"},
+    {"code": "fi", "name": "Finnish"},
+    {"code": "pl", "name": "Polish"},
+    {"code": "tr", "name": "Turkish"},
+    {"code": "cs", "name": "Czech"},
+    {"code": "hu", "name": "Hungarian"},
+    {"code": "ro", "name": "Romanian"},
+    {"code": "bg", "name": "Bulgarian"},
+    {"code": "hr", "name": "Croatian"},
+    {"code": "sk", "name": "Slovak"},
+    {"code": "sl", "name": "Slovenian"},
+    {"code": "et", "name": "Estonian"},
+    {"code": "lv", "name": "Latvian"},
+    {"code": "lt", "name": "Lithuanian"},
+    {"code": "el", "name": "Greek"},
+    {"code": "he", "name": "Hebrew"},
+    {"code": "id", "name": "Indonesian"},
+    {"code": "ms", "name": "Malay"},
+    {"code": "tl", "name": "Filipino"},
+    {"code": "uk", "name": "Ukrainian"},
+    {"code": "ca", "name": "Catalan"},
+    {"code": "eu", "name": "Basque"},
+    {"code": "gl", "name": "Galician"},
+]
+
+LANGUAGE_NAME_MAP = {lang["code"]: lang["name"] for lang in SUPPORTED_LANGUAGES}
+
+
+def _get_language_name(code: str) -> str:
+    """Get human-readable language name from code."""
+    return LANGUAGE_NAME_MAP.get(code, code)
+
+
 class TranslationService:
     """
-    Live translation service using Google Cloud Translation API
+    Live translation service using Google Gemini LLM
     Handles streaming text translation with real-time output
     """
     
     def __init__(self):
         """Initialize the translation service"""
         self.settings = get_settings()
-        self.client: Optional[translate.TranslationServiceClient] = None
+        self.model: Optional[genai.GenerativeModel] = None
         self.is_initialized = False
         self.translation_queue: asyncio.Queue = asyncio.Queue()
         self.active_translations: Dict[str, Dict] = {}
@@ -46,69 +99,51 @@ class TranslationService:
         
     def initialize(self) -> bool:
         """
-        Initialize the Google Cloud Translation client
+        Initialize the Google Gemini client
         
         Returns:
             bool: True if initialization successful, False otherwise
         """
         try:
-            # Set up authentication
-            if self.settings.google_application_credentials:
-                # Get the absolute path to credentials.json from root directory
-                root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                credentials_path = os.path.join(root_dir, self.settings.google_application_credentials)
-                
-                if os.path.exists(credentials_path):
-                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-                    logger.info(f"✅ Using Google Cloud credentials from: {credentials_path}")
-                else:
-                    logger.warning(f"⚠️ Credentials file not found at: {credentials_path}")
-                    logger.info("Please ensure credentials.json is in the root directory")
-            
-            # Initialize the client
-            self.client = translate.TranslationServiceClient()
-            
+            api_key = self.settings.google_api_key
+            if not api_key:
+                logger.error("❌ GOOGLE_API_KEY not set in environment / .env")
+                return False
+
+            genai.configure(api_key=api_key)
+
+            model_name = getattr(self.settings, "gemini_model", "gemini-2.0-flash")
+            self.model = genai.GenerativeModel(model_name)
+
             # Test the connection
             if self._test_connection():
                 self.is_initialized = True
-                logger.info("✅ Google Cloud Translation service initialized successfully")
+                logger.info(f"✅ Google Gemini translation service initialized (model: {model_name})")
                 return True
             else:
-                logger.error("❌ Failed to test Google Cloud Translation connection")
+                logger.error("❌ Failed to test Google Gemini connection")
                 return False
                 
-        except DefaultCredentialsError as e:
-            logger.error(f"❌ Google Cloud credentials not found: {e}")
-            logger.error("Please set GOOGLE_APPLICATION_CREDENTIALS environment variable or run 'gcloud auth application-default login'")
-            return False
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Google Cloud Translation service: {e}")
+            logger.error(f"❌ Failed to initialize Google Gemini translation service: {e}")
             return False
     
     def _test_connection(self) -> bool:
         """
-        Test the connection to Google Cloud Translation API
+        Test the connection to Google Gemini API
         
         Returns:
             bool: True if connection successful, False otherwise
         """
         try:
-            if not self.client:
+            if not self.model:
                 return False
                 
-            # Test with a simple translation
-            parent = f"projects/{self.settings.google_cloud_project_id}/locations/{self.settings.google_cloud_location}"
-            
-            response = self.client.translate_text(
-                request={
-                    "contents": ["Hello"],
-                    "target_language_code": "es",
-                    "parent": parent,
-                    "mime_type": "text/plain"
-                }
+            response = self.model.generate_content(
+                "Translate 'Hello' to Spanish. Reply with ONLY the translated text, nothing else."
             )
-            
-            return len(response.translations) > 0
+            result = response.text.strip()
+            return len(result) > 0
             
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
@@ -123,14 +158,14 @@ class TranslationService:
         mime_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Translate a single text string
+        Translate a single text string using Google Gemini LLM
         
         Args:
             text: Text to translate
             source_language: Source language code (e.g., 'en')
             target_language: Target language code (e.g., 'es')
-            model: Translation model to use
-            mime_type: MIME type of the text
+            model: Unused (kept for interface compatibility)
+            mime_type: Unused (kept for interface compatibility)
             
         Returns:
             Dict containing translation result and metadata
@@ -141,16 +176,12 @@ class TranslationService:
         start_time = time.time()
         
         try:
-            # Use defaults if not provided
             target_lang = target_language or self.settings.default_target_language
-            translation_model = model or self.settings.translation_model
-            mime = mime_type or self.settings.translation_mime_type
             
             # Auto-detect source language if not provided
             if source_language:
                 source_lang = source_language
             else:
-                # Detect the source language automatically
                 detection_result = self.detect_language(text)
                 if detection_result.get("language_code"):
                     source_lang = detection_result["language_code"]
@@ -159,27 +190,24 @@ class TranslationService:
                     source_lang = self.settings.default_source_language
                     logger.warning(f"⚠️ Language detection failed, using default: {source_lang}")
             
-            # Prepare the request
-            parent = f"projects/{self.settings.google_cloud_project_id}/locations/{self.settings.google_cloud_location}"
-            
-            request_params = {
-                "contents": [text],
-                "target_language_code": target_lang,
-                "parent": parent,
-                "mime_type": mime
-            }
-            
-            # Add source language if specified
-            if source_lang:
-                request_params["source_language_code"] = source_lang
-            
-            # Add model if specified and not default
-            if translation_model and translation_model not in ["nmt", "base"]:
-                request_params["model"] = f"{parent}/models/{translation_model}"
-            
-            # Perform translation
-            response = self.client.translate_text(request=request_params)
-            
+            source_name = _get_language_name(source_lang)
+            target_name = _get_language_name(target_lang)
+
+            prompt = (
+                f"Translate the following text from {source_name} to {target_name}.\n"
+                f"Reply with ONLY the translated text. Do not include any explanation, "
+                f"notes, or the original text.\n\n"
+                f"Text to translate:\n{text}"
+            )
+
+            # Run the synchronous Gemini call in a thread to keep async
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, self.model.generate_content, prompt
+            )
+
+            translated_text = response.text.strip()
+
             # Calculate latency
             latency_ms = (time.time() - start_time) * 1000
             
@@ -188,48 +216,29 @@ class TranslationService:
             self.stats["successful_translations"] += 1
             self.stats["last_translation_time"] = datetime.utcnow().isoformat()
             
-            # Update average latency
             if self.stats["average_latency_ms"] == 0:
                 self.stats["average_latency_ms"] = latency_ms
             else:
                 self.stats["average_latency_ms"] = (self.stats["average_latency_ms"] + latency_ms) / 2
             
-            # Get detected language from response or use our detected language
-            detected_lang = None
-            if hasattr(response.translations[0], 'detected_language_code') and response.translations[0].detected_language_code:
-                detected_lang = response.translations[0].detected_language_code
-            elif not source_language:  # If we auto-detected, use that
-                detected_lang = source_lang
-            
-            # Prepare result
+            gemini_model = getattr(self.settings, "gemini_model", "gemini-2.0-flash")
+
             result = {
                 "original_text": text,
-                "translated_text": response.translations[0].translated_text,
+                "translated_text": translated_text,
                 "source_language": source_lang,
                 "target_language": target_lang,
-                "detected_language": detected_lang,
-                "model": translation_model,
-                "mime_type": mime,
+                "detected_language": source_lang if not source_language else None,
+                "model": gemini_model,
+                "mime_type": "text/plain",
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.utcnow().isoformat(),
                 "success": True
             }
             
-            # Display in terminal
             self._display_translation(result)
-            
             return result
             
-        except gcp_exceptions.GoogleAPIError as e:
-            self.stats["failed_translations"] += 1
-            logger.error(f"Google Cloud Translation API error: {e}")
-            return {
-                "original_text": text,
-                "translated_text": None,
-                "error": str(e),
-                "success": False,
-                "timestamp": datetime.utcnow().isoformat()
-            }
         except Exception as e:
             self.stats["failed_translations"] += 1
             logger.error(f"Translation error: {e}")
@@ -258,8 +267,8 @@ class TranslationService:
             text_stream: Async generator yielding text chunks
             source_language: Source language code
             target_language: Target language code
-            model: Translation model to use
-            mime_type: MIME type of the text
+            model: Unused (kept for interface compatibility)
+            mime_type: Unused (kept for interface compatibility)
             batch_size: Number of text chunks to process together
             delay_ms: Delay between translations in milliseconds
             
@@ -272,29 +281,21 @@ class TranslationService:
         buffer = []
         
         async for text_chunk in text_stream:
-            if text_chunk.strip():  # Only process non-empty chunks
+            if text_chunk.strip():
                 buffer.append(text_chunk.strip())
                 
-                # Process batch when it reaches the specified size
                 if len(buffer) >= batch_size:
-                    # Combine text chunks
                     combined_text = " ".join(buffer)
                     
-                    # Translate the batch
                     result = await self.translate_text(
                         text=combined_text,
                         source_language=source_language,
                         target_language=target_language,
-                        model=model,
-                        mime_type=mime_type
                     )
                     
                     yield result
-                    
-                    # Clear buffer
                     buffer = []
                     
-                    # Add delay if specified
                     if delay_ms > 0:
                         await asyncio.sleep(delay_ms / 1000.0)
         
@@ -305,8 +306,6 @@ class TranslationService:
                 text=combined_text,
                 source_language=source_language,
                 target_language=target_language,
-                model=model,
-                mime_type=mime_type
             )
             yield result
     
@@ -334,7 +333,7 @@ class TranslationService:
         Get list of supported languages
         
         Args:
-            target_language: Language to return language names in
+            target_language: Unused (kept for interface compatibility)
             
         Returns:
             List of supported languages with codes and names
@@ -342,32 +341,11 @@ class TranslationService:
         if not self.is_initialized:
             raise RuntimeError("Translation service not initialized")
         
-        try:
-            parent = f"projects/{self.settings.google_cloud_project_id}/locations/{self.settings.google_cloud_location}"
-            
-            response = self.client.get_supported_languages(
-                request={
-                    "parent": parent,
-                    "display_language_code": target_language
-                }
-            )
-            
-            languages = []
-            for language in response.languages:
-                languages.append({
-                    "code": language.language_code,
-                    "name": language.display_name
-                })
-            
-            return languages
-            
-        except Exception as e:
-            logger.error(f"Failed to get supported languages: {e}")
-            return []
+        return [lang.copy() for lang in SUPPORTED_LANGUAGES]
     
     def detect_language(self, text: str) -> Dict[str, Any]:
         """
-        Detect the language of the input text
+        Detect the language of the input text using Gemini
         
         Args:
             text: Text to detect language for
@@ -379,22 +357,30 @@ class TranslationService:
             raise RuntimeError("Translation service not initialized")
         
         try:
-            parent = f"projects/{self.settings.google_cloud_project_id}/locations/{self.settings.google_cloud_location}"
-            
-            response = self.client.detect_language(
-                request={
-                    "parent": parent,
-                    "content": text,
-                    "mime_type": "text/plain"
-                }
+            prompt = (
+                "Detect the language of the following text.\n"
+                "Reply with ONLY a JSON object in this exact format: "
+                '{\"language_code\": \"<ISO 639-1 code>\", \"confidence\": <0.0-1.0>}\n'
+                "Do not include any other text.\n\n"
+                f"Text:\n{text}"
             )
-            
-            detection = response.languages[0]
+
+            response = self.model.generate_content(prompt)
+            raw = response.text.strip()
+
+            # Strip markdown fences if present
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                # Remove first and last lines (fences)
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                raw = "\n".join(lines).strip()
+
+            parsed = json.loads(raw)
             
             return {
                 "text": text,
-                "language_code": detection.language_code,
-                "confidence": detection.confidence,
+                "language_code": parsed.get("language_code"),
+                "confidence": parsed.get("confidence", 0.9),
                 "timestamp": datetime.utcnow().isoformat()
             }
             
@@ -415,15 +401,14 @@ class TranslationService:
         Returns:
             Dict containing service statistics
         """
+        gemini_model = getattr(self.settings, "gemini_model", "gemini-2.0-flash")
         return {
             "is_initialized": self.is_initialized,
             "stats": self.stats.copy(),
             "settings": {
-                "project_id": self.settings.google_cloud_project_id,
-                "location": self.settings.google_cloud_location,
+                "model": gemini_model,
                 "default_source_language": self.settings.default_source_language,
                 "default_target_language": self.settings.default_target_language,
-                "translation_model": self.settings.translation_model
             }
         }
     
@@ -463,4 +448,3 @@ def initialize_translation_service() -> bool:
     """
     service = get_translation_service()
     return service.initialize()
-

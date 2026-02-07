@@ -41,16 +41,17 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
     
-    # Google Cloud Translation Configuration
+    # Google Cloud Configuration
     google_cloud_project_id: Optional[str] = "nama-ai-455515"
     google_cloud_location: str = "us-central1"
     google_application_credentials: str = "credentials.json"  # Path to credentials file from root directory
     
+    # Google Gemini LLM Configuration
+    gemini_model: str = "gemini-2.0-flash"  # Gemini model for translation
+    
     # Translation Configuration
     default_source_language: str = "en"
     default_target_language: str = "es"
-    translation_model: str = "nmt"  # nmt, base, or custom model path
-    translation_mime_type: str = "text/plain"  # text/plain or text/html
     
     class Config:
         env_file = ".env"

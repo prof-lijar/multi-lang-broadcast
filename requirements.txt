@@ -20,6 +20,9 @@ typing-extensions>=4.8.0
 google-cloud-texttospeech>=2.16.0
 pygame>=2.5.0
 
+# Google Gemini LLM
+google-generativeai>=0.8.0
+
 # Build dependencies
 setuptools>=65.0.0
 wheel>=0.37.0
