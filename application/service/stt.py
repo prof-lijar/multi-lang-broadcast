@@ -21,7 +21,10 @@ from google.cloud import speech
 from google.oauth2 import service_account
 
 # Audio processing
-import pyaudio
+try:
+    import pyaudio
+except ImportError:
+    pyaudio = None  # Optional: requires brew install portaudio && pip install pyaudio
 import numpy as np
 
 # Performance monitoring
@@ -47,6 +50,11 @@ class STTService:
             credentials_path: Path to Google Cloud credentials JSON
             enable_monitoring: Whether to enable performance monitoring
         """
+        if pyaudio is None:
+            raise ImportError(
+                "pyaudio is required for STT. Install PortAudio first: brew install portaudio, "
+                "then: pip install pyaudio"
+            )
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.language_code = language_code
