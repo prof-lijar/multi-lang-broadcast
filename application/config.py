@@ -3,8 +3,14 @@ Configuration settings for the Multi-Language Broadcast API
 """
 
 import os
+from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
+
+# Resolve .env path relative to this config file so it works regardless of CWD
+_CONFIG_DIR = Path(__file__).resolve().parent
+_ENV_FILE = _CONFIG_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -52,9 +58,10 @@ class Settings(BaseSettings):
     translation_model: str = "nmt"  # nmt, base, or custom model path
     translation_mime_type: str = "text/plain"  # text/plain or text/html
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
+        case_sensitive=False
+    )
 
 
 # Global settings instance

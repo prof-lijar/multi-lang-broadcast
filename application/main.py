@@ -101,36 +101,36 @@ async def lifespan(app: FastAPI):
         # Initialize audio service
         audio_service = get_audio_service()
         if audio_service.initialize():
-            print("✅ Audio service initialized successfully")
+            logger.info("✅ Audio service initialized successfully")
         else:
-            print("⚠️ Audio service initialization failed")
+            logger.warning("⚠️ Audio service initialization failed")
         
         # Initialize translation service
         if initialize_translation_service():
-            print("✅ Translation service initialized successfully")
+            logger.info("✅ Translation service initialized successfully")
         else:
-            print("⚠️ Translation service initialization failed")
+            logger.warning("⚠️ Translation service initialization failed")
         
         # Initialize STT service
         if initialize_stt_service():
-            print("✅ STT service initialized successfully")
+            logger.info("✅ STT service initialized successfully")
         else:
-            print("⚠️ STT service initialization failed")
+            logger.warning("⚠️ STT service initialization failed")
         
         # Initialize TTS service
         if initialize_tts_service():
-            print("✅ TTS service initialized successfully")
+            logger.info("✅ TTS service initialized successfully")
         else:
-            print("⚠️ TTS service initialization failed")
+            logger.warning("⚠️ TTS service initialization failed")
         
         # Initialize TTS queue
         if initialize_tts_queue():
-            print("✅ TTS queue initialized successfully")
+            logger.info("✅ TTS queue initialized successfully")
         else:
-            print("⚠️ TTS queue initialization failed")
+            logger.warning("⚠️ TTS queue initialization failed")
             
     except Exception as e:
-        print(f"❌ Error initializing services: {e}")
+        logger.error(f"❌ Error initializing services: {e}", exc_info=True)
     
     yield
     
@@ -498,37 +498,69 @@ async def reset_translation_statistics():
 async def transcribe_audio_file(request: STTFileRequest):
     """Transcribe audio from base64 encoded audio data"""
     try:
-        stt_service = get_stt_service()
-        
-        if not stt_service.is_initialized:
+        try:
+            stt_service = get_stt_service()
+        except Exception as e:
+            # STT service not initialized (likely due to missing credentials)
+            logger.error(f"STT service not available: {e}")
             raise HTTPException(
                 status_code=503,
-                detail="STT service not initialized"
+                detail=f"STT service not available: {str(e)}. Please check Google Cloud credentials configuration."
+            )
+        
+        if not stt_service.is_initialized or stt_service.speech_client is None:
+            error_detail = "STT service not initialized."
+            if stt_service.last_error:
+                error_detail += f" Error: {stt_service.last_error}"
+            error_detail += " Please check Google Cloud credentials configuration. See CREDENTIALS_SETUP.md for instructions."
+            raise HTTPException(
+                status_code=503,
+                detail=error_detail
             )
         
         # Decode base64 audio data
         try:
             audio_data = base64.b64decode(request.audio_data)
+            logger.info(f"Decoded audio data: {len(audio_data)} bytes")
         except Exception as e:
+            logger.error(f"Failed to decode base64 audio data: {e}", exc_info=True)
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid base64 audio data: {str(e)}"
             )
         
-        result = await stt_service.transcribe_audio_file(
-            audio_data=audio_data,
-            language_code=request.language_code
-        )
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "data": result
-        }
+        try:
+            result = await stt_service.transcribe_audio_file(
+                audio_data=audio_data,
+                language_code=request.language_code,
+                sample_rate=request.sample_rate
+            )
+            
+            logger.info(f"Transcription successful: {len(result.get('results', []))} results")
+            
+            return {
+                "status": "success",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": result
+            }
+        except Exception as e:
+            error_msg = str(e)
+            # Check if this is an initialization error and convert to 503
+            if "not initialized" in error_msg.lower() or "credentials" in error_msg.lower():
+                logger.error(f"STT service initialization error: {error_msg}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=error_msg
+                )
+            logger.error(f"STT transcription error: {error_msg}", exc_info=True)
+            raise
         
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Audio transcription failed: {e}\n{error_traceback}")
         raise HTTPException(
             status_code=500,
             detail=f"Audio transcription failed: {str(e)}"
@@ -1563,6 +1595,115 @@ async def clear_tts_queue():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to clear TTS queue: {str(e)}"
+        )
+
+# Model endpoints
+@app.get("/models/translation", response_model=Dict[str, Any])
+async def get_translation_models():
+    """Get available translation models"""
+    try:
+        translation_service = get_translation_service()
+        
+        # Standard Google Cloud Translation models
+        models = [
+            {
+                "id": "nmt",
+                "name": "Neural Machine Translation",
+                "description": "Google's Neural Machine Translation model (default)",
+                "type": "standard"
+            },
+            {
+                "id": "base",
+                "name": "Base Translation Model",
+                "description": "Google's base translation model",
+                "type": "standard"
+            }
+        ]
+        
+        # Add current model info if service is initialized
+        if translation_service.is_initialized:
+            current_model = translation_service.settings.translation_model
+            for model in models:
+                if model["id"] == current_model:
+                    model["is_default"] = True
+                    break
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "models": models,
+                "count": len(models),
+                "service_initialized": translation_service.is_initialized
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get translation models: {str(e)}"
+        )
+
+@app.get("/models/llm", response_model=Dict[str, Any])
+async def get_llm_models():
+    """Get available LLM models"""
+    try:
+        # Currently no LLM service is implemented
+        # This endpoint is provided for future use
+        models = []
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "models": models,
+                "count": len(models),
+                "message": "LLM service not yet implemented"
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get LLM models: {str(e)}"
+        )
+
+@app.get("/models/custom", response_model=Dict[str, Any])
+async def get_custom_models():
+    """Get available custom models"""
+    try:
+        translation_service = get_translation_service()
+        
+        # Custom models would be any model path that's not "nmt" or "base"
+        # For now, return empty list as custom models need to be configured
+        custom_models = []
+        
+        # Check if there's a custom model configured
+        if translation_service.is_initialized:
+            current_model = translation_service.settings.translation_model
+            if current_model and current_model not in ["nmt", "base"]:
+                custom_models.append({
+                    "id": current_model,
+                    "name": f"Custom Model: {current_model}",
+                    "description": f"Custom translation model: {current_model}",
+                    "type": "custom",
+                    "is_default": True
+                })
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "models": custom_models,
+                "count": len(custom_models),
+                "service_initialized": translation_service.is_initialized
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get custom models: {str(e)}"
         )
 
 

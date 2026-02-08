@@ -136,7 +136,8 @@ class STTService:
             print(f"✗ Failed to initialize Google Speech client: {e}")
             self.is_initialized = False
             self.last_error = str(e)
-            raise
+            # Don't raise - allow service instance to be created but marked as not initialized
+            self.speech_client = None
     
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Audio callback for real-time streaming."""
@@ -561,35 +562,89 @@ class STTService:
         
         print("✅ Streaming restarted")
     
-    async def transcribe_audio_file(self, audio_data: bytes, language_code: str = None) -> Dict[str, Any]:
+    async def transcribe_audio_file(self, audio_data: bytes, language_code: str = None, sample_rate: int = None) -> Dict[str, Any]:
         """Transcribe audio from file data."""
-        if not self.is_initialized:
-            raise Exception("STT service not initialized")
+        if not self.is_initialized or self.speech_client is None:
+            if self.last_error:
+                error_msg = f"STT service not initialized: {self.last_error}"
+            else:
+                error_msg = "STT service not initialized. Google Cloud credentials are required."
+            raise Exception(f"{error_msg} Please check Google Cloud credentials configuration. See CREDENTIALS_SETUP.md for instructions.")
+        
+        if not audio_data or len(audio_data) == 0:
+            raise ValueError("Audio data is empty")
         
         try:
-            # Configure recognition
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=self.sample_rate,
-                language_code=language_code or self.language_code,
-                enable_automatic_punctuation=True,
-                model="latest_long",
-                use_enhanced=True,
-            )
+            # Use provided sample rate or default
+            sample_rate_hertz = sample_rate or self.sample_rate
             
-            audio = speech.RecognitionAudio(content=audio_data)
+            # Try with ENCODING_UNSPECIFIED first (allows Google to auto-detect encoding for FLAC, LINEAR16, etc.)
+            # If that fails, fall back to LINEAR16
+            configs_to_try = [
+                {
+                    "encoding": speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED,
+                    "sample_rate_hertz": sample_rate_hertz,
+                },
+                {
+                    "encoding": speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                    "sample_rate_hertz": sample_rate_hertz,
+                },
+            ]
             
-            # Perform the recognition
-            response = self.speech_client.recognize(config=config, audio=audio)
+            def _perform_recognition(config_params):
+                """Helper function to perform recognition (runs in executor)"""
+                config = speech.RecognitionConfig(
+                    encoding=config_params["encoding"],
+                    sample_rate_hertz=config_params["sample_rate_hertz"],
+                    language_code=language_code or self.language_code,
+                    enable_automatic_punctuation=True,
+                    model="latest_long",
+                    use_enhanced=True,
+                )
+                
+                audio = speech.RecognitionAudio(content=audio_data)
+                
+                # Perform the recognition (blocking call)
+                return self.speech_client.recognize(config=config, audio=audio)
+            
+            response = None
+            last_error = None
+            for config_params in configs_to_try:
+                try:
+                    # Run blocking recognition in executor to avoid blocking event loop
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None, 
+                        _perform_recognition, 
+                        config_params
+                    )
+                    break  # Success, exit the retry loop
+                    
+                except Exception as e:
+                    last_error = e
+                    print(f"Recognition attempt failed with {config_params['encoding']}: {str(e)}")
+                    # If this is not the last config to try, continue to next
+                    if config_params != configs_to_try[-1]:
+                        continue
+                    # If this was the last config, re-raise the error
+                    raise Exception(f"Failed with both encoding types. Last error: {str(e)}") from e
+            
+            if response is None:
+                raise Exception("No response from Google Speech API")
             
             results = []
             for result in response.results:
+                if not result.alternatives:
+                    continue
                 alternative = result.alternatives[0]
                 results.append({
                     "transcript": alternative.transcript,
                     "confidence": alternative.confidence,
                     "language": language_code or self.language_code
                 })
+            
+            if not results:
+                raise Exception("No transcription results returned from Google Speech API")
             
             return {
                 "status": "success",
@@ -600,11 +655,11 @@ class STTService:
         except Exception as e:
             self.error_count += 1
             self.last_error = str(e)
-            return {
-                "status": "error",
-                "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            import traceback
+            error_traceback = traceback.format_exc()
+            print(f"STT transcription error: {e}\n{error_traceback}")
+            # Re-raise the exception so the endpoint can handle it properly
+            raise Exception(f"Transcription failed: {str(e)}") from e
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get service statistics and performance metrics."""
